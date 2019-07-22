@@ -21,10 +21,8 @@
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
 
-#ifndef STASSID
 #define STASSID "FrontierHSI"
 #define STAPSK  ""
-#endif
 
 const char * ssid = STASSID; // your network SSID (name)
 const char * pass = STAPSK;  // your network password
@@ -46,7 +44,12 @@ byte packetBuffer[ NTP_PACKET_SIZE]; //buffer to hold incoming and outgoing pack
 WiFiUDP udp;
 
 void setup() {
-  Serial.begin(115200);
+  Serial.setDebugOutput(true);
+  Serial.begin(9600);
+  delay(2000);
+  Serial.println();
+  Serial.println();
+  Serial.println("***********************************************************************************************");
   Serial.println();
   Serial.println();
 
