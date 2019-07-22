@@ -2,19 +2,16 @@
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
 #include <DHT.h>
+#include <PubSubClient.h>
 
-#define DHTPIN 7
-#define DHTTYPE DHT22
 
-#ifndef STASSID
-#define STASSID "FrontierHSI"
-#define STAPSK  ""
-#endif
+#define DHTPIN 13        // what pin we're connected to
+#define DHTTYPE DHT22   // DHT 22  (AM2302)
 
-const char* ssid     = STASSID;
-const char* password = STAPSK;
+const char* ssid     = "FrontierHSI";
+const char* password = "";
 
-const char* host = "192.168.254.221";
+const char* mqtt_server = "192.168.254.221";
 const uint16_t port = 1883;
 
 unsigned int localPort = 2390;  // local port to listen for UDP packets
@@ -33,49 +30,96 @@ byte packetBuffer[ NTP_PACKET_SIZE]; //buffer to hold incoming and outgoing pack
 unsigned long           epoch;
 const unsigned long     seventyYears = 2208988800UL;
 
-float humidity;
-float temperature;
+DHT dht(DHTPIN, DHTTYPE, 15);
 
-String cepoch(unsigned long ep) {
-  String      rstring;
+WiFiClient espClient;
+PubSubClient client(espClient);
+long lastMsg = 0;
+char msg[100];
+int value = 0;
 
-  rstring = "test";
+void setup_wifi() {
 
-
-  return rstring;
-}
-
-
-
-void setup() {
-  Serial.begin(115200);
-
-  // connect to a WiFi network
-  Serial.println();
+  delay(10);
+  // We start by connecting to a WiFi network
   Serial.println();
   Serial.print("Connecting to ");
   Serial.println(ssid);
 
-  /* Explicitly set the ESP8266 to be a WiFi-client*/
-  WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
+    delay(500);
     Serial.print(".");
   }
+
+  randomSeed(micros());
 
   Serial.println("");
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
+}
 
-  Serial.println("Starting UDP");
-  udp.begin(localPort);
-  Serial.print("Local port: ");
-  Serial.println(udp.localPort());
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+  for (int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+  }
+  Serial.println();
 
-  get_timestamp();    // initialize function
+  // Switch on the LED if an 1 was received as first character
+  if ((char)payload[0] == '1') {
+    digitalWrite(BUILTIN_LED, LOW);   // Turn the LED on (Note that LOW is the voltage level
+    // but actually the LED is on; this is because
+    // it is active low on the ESP-01)
+  } else {
+    digitalWrite(BUILTIN_LED, HIGH);  // Turn the LED off by making the voltage HIGH
+  }
+
+}
+
+void reconnect() {
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    // Create a random client ID
+    String clientId = "ESP8266Client-";
+    clientId += String(random(0xffff), HEX);
+    // Attempt to connect
+    if (client.connect(clientId.c_str())) {
+      Serial.println("connected");
+      // Once connected, publish an announcement...
+      client.publish("258Thomas/testing", "hello world");
+      // ... and resubscribe
+      client.subscribe("258Thomas/testing");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  // connect to a WiFi network
+  setup_wifi();
+
+  // wait for a good time stamp
+  while (get_timestamp()==0) delay(100);
+
+  // initialize the DHT22 sensor
+  dht.begin();
+
+  // connect to MQTT broker
+  client.setServer(mqtt_server, 1883);
+  client.setCallback(callback);        
 }
 
 // send an NTP request to the time server at the given address
@@ -108,15 +152,17 @@ unsigned long get_timestamp() {
   WiFi.hostByName(ntpServerName, timeServerIP);
 
   sendNTPpacket(timeServerIP); // send an NTP packet to a time server
-  // wait to see if a reply is available
-  delay(1000);
+  
+  delay(1000);  // wait to see if a reply is available
 
   int cb = udp.parsePacket();
+  delay(100);
   if (!cb) {
     // Serial.println("no packet yet");
     delay(100);
   } 
   else {
+    // Serial.println("got a packet");
     // We've received a packet, read the data from it
     // read the packet into the buffer
     udp.read(packetBuffer, NTP_PACKET_SIZE); 
@@ -129,7 +175,6 @@ unsigned long get_timestamp() {
     unsigned long secsSince1900 = highWord << 16 | lowWord;
     // now convert NTP time into everyday time:
     // Unix time starts on Jan 1 1970. In seconds, that's 2208988800:
-
     // subtract seventy years:
     epoch = secsSince1900 - seventyYears;
   }
@@ -137,49 +182,31 @@ unsigned long get_timestamp() {
   return epoch;
 }
 
-// get data from DHT22 sensor on <pin>
-void rdDHT22(){
-
-  DHT dht(DHTPIN,DHTTYPE);
-  temperature = dht.readTemperature(true);
-  humidity = dht.readHumidity();
-
-  if (isnan(temperature) || isnan(humidity)){
-    Serial.println("DTH22 read failed");
-  }
-
-  return;
-}
-
 void loop() {
-  String       tstamp;
+  unsigned long         tstamp;
+  char                  msg[100];
+  float                 temperature;
+  float                 humidity;
+
 
   Serial.print("connecting to ");
-  Serial.print(host);
+  Serial.print(mqtt_server);
   Serial.print(':');
   Serial.println(port);
 
-  // Use WiFiClient class to create TCP connections
-  WiFiClient client;
-  if (!client.connect(host, port)) {
-    Serial.println("connection failed");
-    delay(5000);
-    return;
-  }
-
   if (client.connected()) {
-    // Serial.println("hello from ESP8266");
-    //read sensor
+  // build MQTT message
     tstamp = get_timestamp();
-  
+    temperature = dht.readTemperature(true);
+    humidity = dht.readHumidity();
+    if (isnan(temperature) || isnan(humidity)){
+      Serial.println("DTH22 read failed");
+      return;
+    }
 
-    // rdDHT22();
-    Serial.print(tstamp);
-    Serial.print("   temperature: ");
-    Serial.print(temperature);
-    Serial.print("   humidity: ");
-    Serial.println(humidity);
-
+    snprintf (msg, 100, "%lu %2.2f %2.2f", tstamp, temperature, humidity);
+    Serial.println(msg);
+    client.publish("258Thomas/testing", msg);
   }
 
   // Close the connection

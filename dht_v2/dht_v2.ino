@@ -1,3 +1,4 @@
+
 #include "DHTesp.h"
 
 #ifdef ESP32
@@ -18,7 +19,7 @@ void setup()
   // Autodetect is not working reliable, don't use the following line
   // dht.setup(17);
   // use this instead: 
-  dht.setup(7, DHTesp::DHT22); // Connect DHT sensor to GPIO 17
+  dht.setup(13, DHTesp::DHT22); // Connect DHT sensor to GPIO 17
 }
 
 void loop()
