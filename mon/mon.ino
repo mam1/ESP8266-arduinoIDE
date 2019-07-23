@@ -131,7 +131,7 @@ void loop() {
 
     str = timeClient.getFormattedTime();
     Serial.println(str);
-    snprintf (msg, 100, "%s humididy: %2.2f  temperature: %2.2f", "str",temperature, humidity);
+    snprintf (msg, 100, "%s humididy: %2.2f  temperature: %2.2f", str,temperature, humidity);
     Serial.print("Publish message: ");
     Serial.println(msg);
     client.publish("258Thomas/testing", msg);
