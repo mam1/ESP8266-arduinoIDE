@@ -10,14 +10,16 @@ const char* ssid = "FrontierHSI";
 const char* password = "";
 const char* mqtt_server = "192.168.254.221";
 
+#define LOOP_DELAY  60000
+
 #define DHTPIN 13       // what pin we're connected to
 #define DHTTYPE DHT22   // DHT 22  (AM2302)
 
-DHT dht(DHTPIN, DHTTYPE, 15);
-
-#define NTP_OFFSET   60 * 60      // In seconds
+#define NTP_OFFSET   60 * 60 * 20     // In seconds
 #define NTP_INTERVAL 60 * 1000    // In miliseconds
-#define NTP_ADDRESS  "europe.pool.ntp.org"
+#define NTP_ADDRESS  "us.pool.ntp.org"
+
+DHT dht(DHTPIN, DHTTYPE, 15);
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, NTP_ADDRESS, NTP_OFFSET, NTP_INTERVAL);
@@ -82,15 +84,16 @@ void reconnect() {
     if (client.connect(clientId.c_str())) {
       Serial.println("connected");
       // Once connected, publish an announcement...
-      client.publish("258Thomas/testing", "hello world");
+      // client.publish("258Thomas/testing", "hello world");
       // ... and resubscribe
-      client.subscribe("258Thomas/testing");
-    } else {
+      // client.subscribe("258Thomas/testing");
+    } 
+    else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
       Serial.println(" try again in 5 seconds");
       // Wait 5 seconds before retrying
-      delay(5000);
+      delay(10000);
     }
   }
 }
@@ -110,6 +113,8 @@ void loop() {
   float                 temperature;
   float                 humidity;
   String                str;
+  unsigned long         epoch;
+ 
 
   timeClient.update();
   if (!client.connected()) {
@@ -118,7 +123,7 @@ void loop() {
   client.loop();
 
   long now = millis();
-  if (now - lastMsg > 2000) {
+  if (now - lastMsg > LOOP_DELAY) {
     lastMsg = now;
     ++value;
 
@@ -128,12 +133,17 @@ void loop() {
       Serial.println("DTH22 read failed");
       return;
     }
+    epoch =  timeClient.getEpochTime();
 
-    str = timeClient.getFormattedTime();
-    Serial.println(str);
-    snprintf (msg, 100, "%s humididy: %2.2f  temperature: %2.2f", str,temperature, humidity);
-    Serial.print("Publish message: ");
-    Serial.println(msg);
-    client.publish("258Thomas/testing", msg);
+
+    snprintf (msg, 100, "%lu temperature: %2.2f", epoch,temperature);
+    client.publish("258Thomas/location/temperature", msg);
+    // delay(2000);
+    snprintf (msg, 100, "%lu humidity: %2.2f", epoch,humidity);
+    client.publish("258Thomas/location/humidity", msg);
+
+    Serial.print(str);
+    Serial.printf("%lu published sensor readings\n", epoch);
   }
 }
+
