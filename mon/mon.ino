@@ -5,6 +5,7 @@
 #include <PubSubClient.h>
 #include <DHT.h>
 #include <NTPClient.h>
+#include <time.h>
 
 const char* ssid = "FrontierHSI";
 const char* password = "";
@@ -114,6 +115,8 @@ void loop() {
   float                 humidity;
   String                str;
   unsigned long         epoch;
+  char*                 c_time_string;
+  time_t                unix_time;
  
 
   timeClient.update();
@@ -134,16 +137,50 @@ void loop() {
       return;
     }
     epoch =  timeClient.getEpochTime();
+    unix_time = static_cast<time_t>(epoch);
+    c_time_string = ctime(&unix_time);
+
+        // ========================
+    // Relevant code in this section.
+    char *src, *dst;
+    for (src = dst = c_time_string; *src != '\0'; src++) {
+        *dst = *src;
+        if (*dst != '\n') dst++;
+    }
+    *dst = '\0';
+    // ========================
+    // Serial.print("time string ");
+    // Serial.println(c_time_string);
+
+    // // print the hour, minute and second:
+    // Serial.print("epoch ");
+    // Serial.println(epoch);
+    // Serial.print("The UTC time is ");       // UTC is the time at Greenwich Meridian (GMT)
+    // Serial.print((epoch  % 86400L) / 3600); // print the hour (86400 equals secs per day)
+    // Serial.print(':');
+    // if (((epoch % 3600) / 60) < 10) {
+    //   // In the first 10 minutes of each hour, we'll want a leading '0'
+    //   Serial.print('0');
+    // }
+    // Serial.print((epoch  % 3600) / 60); // print the minute (3600 equals secs per minute)
+    // Serial.print(':');
+    // if ((epoch % 60) < 10) {
+    //   // In the first 10 seconds of each minute, we'll want a leading '0'
+    //   Serial.print('0');
+    // }
+    // Serial.print(epoch % 60); // print the second
+
+    // Serial.printf("\n");
 
 
-    snprintf (msg, 100, "%lu temperature: %2.2f", epoch,temperature);
+    snprintf (msg, 100, "%s temperature: %2.2f", c_time_string,temperature);
     client.publish("258Thomas/location/temperature", msg);
     // delay(2000);
-    snprintf (msg, 100, "%lu humidity: %2.2f", epoch,humidity);
+    snprintf (msg, 100, "%s humidity: %2.2f", c_time_string,humidity);
     client.publish("258Thomas/location/humidity", msg);
 
     Serial.print(str);
-    Serial.printf("%lu published sensor readings\n", epoch);
+    Serial.printf("%s published sensor readings\n", c_time_string);
   }
 }
 
