@@ -14,8 +14,14 @@ const char* ssid = "FrontierHSI";
 const char* password = "";
 const char* mqtt_server = "192.168.254.221";
 
+#define PARENT_TOPIC  "258Thomas"
+#define TYPE_TOPIC "sensor"
+#define LOCATION_TOPIC "dryer"
+#define TEMPERATURE_TOPIC "temperature"
+#define HUMIDITY_TOPIC "humidity"
 #define MQTT_MESSAGE_SIZE  100
 #define LOOP_DELAY  60000                     // time between readings
+#define DHT22_OFFSET -30
 
 #define DHTPIN 13                             // what pin we're connected to
 #define DHTTYPE DHT22                         // DHT 22  (AM2302)
@@ -91,6 +97,8 @@ void reconnect() {
 }
 
 void setup() {
+
+
   pinMode(BUILTIN_LED, OUTPUT);         // initialize the BUILTIN_LED pin as an output
   Serial.begin(115200);                 // start the serial interface
   setup_wifi();                         // connect to wifi
@@ -98,16 +106,19 @@ void setup() {
   dht.begin();                          // initialize the DHT22 sensor
   client.setServer(mqtt_server, 1883);  // initialize MQTT broker
   client.setCallback(callback);
+
 }
 
 void loop() {
 
+  String                tt;
+  String                th;
   float                 temperature;
   float                 humidity;
   unsigned long         epoch;
   char*                 c_time_string;
   time_t                unix_time;
- 
+
   // update the time client
   timeClient.update();
 
@@ -125,6 +136,7 @@ void loop() {
 
     temperature = dht.readTemperature(true);
     humidity = dht.readHumidity();
+    humidity += float(DHT22_OFFSET);
     if (isnan(temperature) || isnan(humidity)){
       Serial.println("DTH22 read failed");
       return;
@@ -143,11 +155,27 @@ void loop() {
     }
     *dst = '\0';
 
-    //publish the readings
+    // publish the readings
+    tt = PARENT_TOPIC;
+    tt += "/";
+    tt += TYPE_TOPIC;
+    tt += "/";
+    tt += LOCATION_TOPIC;
+    tt += "/";
+    tt += TEMPERATURE_TOPIC;
+
+    th = PARENT_TOPIC;
+    th += "/";
+    th += TYPE_TOPIC;
+    th += "/";
+    th += LOCATION_TOPIC;
+    th += "/";
+    th += HUMIDITY_TOPIC;
+
     snprintf (msg, MQTT_MESSAGE_SIZE, "%s temperature: %2.2f", c_time_string,temperature);
-    client.publish("258Thomas/location/temperature", msg);
+    client.publish(tt.c_str(), msg);
     snprintf (msg, MQTT_MESSAGE_SIZE, "%s humidity: %2.2f", c_time_string,humidity);
-    client.publish("258Thomas/location/humidity", msg);
+    client.publish(th.c_str(), msg);
     Serial.printf("%s published sensor readings\n", c_time_string);
   }
 }
