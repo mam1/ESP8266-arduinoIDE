@@ -14,12 +14,14 @@ const char* ssid = "FrontierHSI";
 const char* password = "";
 const char* mqtt_server = "192.168.254.221";
 
-#define PUB_TOPIC_H             "258Thomas/shop/sensor/dryer/humidity"
-#define PUB_TOPIC_T             "258Thomas/shop/sensor/dryer/temperature"
-
+#define PARENT_TOPIC  "258Thomas"
+#define TYPE_TOPIC "sensor"
+#define LOCATION_TOPIC "test"
+#define TEMPERATURE_TOPIC "temperature"
+#define HUMIDITY_TOPIC "humidity"
 #define MQTT_MESSAGE_SIZE  100
-#define LOOP_DELAY  60000                     // time between readings
-#define DHT22_OFFSET -13
+#define LOOP_DELAY  6000                     // time between readings
+#define DHT22_OFFSET -30
 
 #define DHTPIN 13                             // what pin we're connected to
 #define DHTTYPE DHT22                         // DHT 22  (AM2302)
@@ -134,12 +136,11 @@ void loop() {
 
     temperature = dht.readTemperature(true);
     humidity = dht.readHumidity();
+    humidity += float(DHT22_OFFSET);
     if (isnan(temperature) || isnan(humidity)){
       Serial.println("DTH22 read failed");
       return;
     }
-
-    humidity += float(DHT22_OFFSET);
 
     // get the time
     epoch =  timeClient.getEpochTime();
@@ -155,14 +156,41 @@ void loop() {
     *dst = '\0';
 
     // publish the readings
-    snprintf (msg, MQTT_MESSAGE_SIZE, "%s temperature: %2.2f", c_time_string,temperature);
-    // client.publish(tt.c_str(), msg);
-    client.publish(PUB_TOPIC_T, msg);
+    tt = PARENT_TOPIC;
+    tt += "/";
+    tt += TYPE_TOPIC;
+    tt += "/";
+    tt += LOCATION_TOPIC;
+    tt += "/";
+    tt += TEMPERATURE_TOPIC;
 
+    th = PARENT_TOPIC;
+    th += "/";
+    th += TYPE_TOPIC;
+    th += "/";
+    th += LOCATION_TOPIC;
+    th += "/";
+    th += HUMIDITY_TOPIC;
+
+    snprintf (msg, MQTT_MESSAGE_SIZE, "%s temperature: %2.2f", c_time_string,temperature);
+    client.publish(tt.c_str(), msg);
     snprintf (msg, MQTT_MESSAGE_SIZE, "%s humidity: %2.2f", c_time_string,humidity);
+    client.publish(th.c_str(), msg);
+
+
+    // snprintf (msg, MQTT_MESSAGE_SIZE, "%2.2f",humidity);
     // client.publish(th.c_str(), msg);
-    client.publish(PUB_TOPIC_H, msg);
-    Serial.printf("%s published sensor readings\n", c_time_string);
+
+    int sensorValue = 50;
+
+    sensorValue = (int)humidity;
+
+      Serial.println(sensorValue);
+      Serial.print(" ");
+
+    // Serial.printf("%2.2f/n ", humidity);
+
+    // Serial.printf("%s published sensor readings\n", c_time_string);
   }
 }
 
