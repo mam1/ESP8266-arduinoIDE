@@ -19,10 +19,10 @@ const char* mqtt_server = "192.168.254.221";
 
 #define MQTT_MESSAGE_SIZE  100
 #define LOOP_DELAY  60000                     // time between readings
-#define DHT22_OFFSET -13
 
-#define DHTPIN 13                             // what pin we're connected to
-#define DHTTYPE DHT22                         // DHT 22  (AM2302)
+#define DHTPIN               13               // pin the DHT22 is connected to
+#define DHTTYPE           DHT22               // DHT 22  (AM2302)
+#define DHT22_OFFSET         -6               // correction added to DHT22 huniudity reading
 
 #define EST_OFFSET   -4                       // convert GMT to EST
 #define NTP_OFFSET   60 * 60 * EST_OFFSET     // In seconds
@@ -36,14 +36,15 @@ NTPClient timeClient(ntpUDP, NTP_ADDRESS, NTP_OFFSET, NTP_INTERVAL);
 
 WiFiClient espClient;
 PubSubClient client(espClient);
+
 long lastMsg = 0;
 char msg[MQTT_MESSAGE_SIZE];
 int value = 0;
 
+/* setu a wifi connection */
 void setup_wifi() {
-
   delay(10);
-  // We start by connecting to a WiFi network
+  // Connect to WiFi network
   Serial.println();
   Serial.print("Connecting to ");
   Serial.println(ssid);
@@ -109,8 +110,8 @@ void setup() {
 
 void loop() {
 
-  String                tt;
-  String                th;
+  // String                tt;
+  // String                th;
   float                 temperature;
   float                 humidity;
   unsigned long         epoch;
@@ -156,11 +157,9 @@ void loop() {
 
     // publish the readings
     snprintf (msg, MQTT_MESSAGE_SIZE, "%s temperature: %2.2f", c_time_string,temperature);
-    // client.publish(tt.c_str(), msg);
     client.publish(PUB_TOPIC_T, msg);
 
     snprintf (msg, MQTT_MESSAGE_SIZE, "%s humidity: %2.2f", c_time_string,humidity);
-    // client.publish(th.c_str(), msg);
     client.publish(PUB_TOPIC_H, msg);
     Serial.printf("%s published sensor readings\n", c_time_string);
   }

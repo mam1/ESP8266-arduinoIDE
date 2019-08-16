@@ -1,47 +1,69 @@
+/*
+  
+  read Adafruit HTU21D-Fsensor and report temperature and humidity
 
+*/
+
+#include <stdio.h>
+#include <string.h>
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
-#include <DHT.h>
 #include <PubSubClient.h>
+#include <DHT.h>
+#include <NTPClient.h>
+#include <time.h>
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
+#define SCREEN_WIDTH 128                      // OLED display width, in pixels
+#define SCREEN_HEIGHT 64                      // OLED display height, in pixels
+#define SUB_TOPIC             "258Thomas/shop/sensor/dryer/offset"
+#define PUB_TOPIC             "258Thomas/shop/controller/dryer/dehumidifier"
+#define MQTT_MESSAGE_SIZE   100               // max size of mqtt message
+#define LOOP_DELAY          60000             // time between readings
+#define HUMIDITY_HIGH_LIMIT 25                // turn dehumidifier on
+#define HUMIDITY_LOW_LIMIT  20                // tune dehumidifier off
+#define EST_OFFSET   -4                       // convert GMT to EST
+#define NTP_OFFSET   60 * 60 * EST_OFFSET     // In seconds
+#define NTP_INTERVAL 60 * 1000                // In milliseconds
+#define NTP_ADDRESS  "us.pool.ntp.org"        // time server
 
-#define DHTPIN 13        // what pin we're connected to
-#define DHTTYPE DHT22   // DHT 22  (AM2302)
-
-const char* ssid     = "FrontierHSI";
+const char* ssid = "FrontierHSI";
 const char* password = "";
-
 const char* mqtt_server = "192.168.254.221";
-const uint16_t port = 1883;
 
-unsigned int localPort = 2390;  // local port to listen for UDP packets
-WiFiUDP udp;                    // A UDP instance to let us send and receive packets over UDP
+#define OLED_RESET     -1         // Reset pin # (or -1 if sharing Arduino reset pin)
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-/* Don't hardwire the IP address or we won't get the benefits of the pool.
-    Lookup the IP address for the host name instead */
+// ESP8266 GPIO pins 
+static const uint8_t D0   = 16;   // blue led
+static const uint8_t D1   = 5;    // SCL
+static const uint8_t D2   = 4;    // SDA
+static const uint8_t D3   = 0;    // Power relay
+static const uint8_t D4   = 2;
+static const uint8_t D5   = 14;
+static const uint8_t D6   = 12;
+static const uint8_t D7   = 13;
+static const uint8_t D8   = 15;
+static const uint8_t D9   = 3;
+static const uint8_t D10  = 1;
 
-//IPAddress timeServer(129, 6, 15, 28); // time.nist.gov NTP server
-IPAddress timeServerIP; // time.nist.gov NTP server address
-const char* ntpServerName = "time.nist.gov";
-
-const int NTP_PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of the message
-
-byte packetBuffer[ NTP_PACKET_SIZE]; //buffer to hold incoming and outgoing packets
-unsigned long           epoch;
-const unsigned long     seventyYears = 2208988800UL;
-
-DHT dht(DHTPIN, DHTTYPE, 15);
-
+WiFiUDP ntpUDP;
 WiFiClient espClient;
 PubSubClient client(espClient);
-long lastMsg = 0;
-char msg[100];
-int value = 0;
+NTPClient timeClient(ntpUDP, NTP_ADDRESS, NTP_OFFSET, NTP_INTERVAL);
 
+long        lastMsg = 0;
+char        msg[MQTT_MESSAGE_SIZE];
+int         value = 0;
+int         dehumidifer_state = 0;
+
+/* setup a wifi connection */
 void setup_wifi() {
-
   delay(10);
-  // We start by connecting to a WiFi network
+  // Connect to WiFi network
   Serial.println();
   Serial.print("Connecting to ");
   Serial.println(ssid);
@@ -61,7 +83,14 @@ void setup_wifi() {
   Serial.println(WiFi.localIP());
 }
 
+/* called when a message is recieved */
 void callback(char* topic, byte* payload, unsigned int length) {
+
+  char hstring[] = "offset";
+  String          convert;
+  char char1[8];
+  float humid;
+
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
@@ -70,17 +99,29 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
   Serial.println();
 
-  // Switch on the LED if an 1 was received as first character
-  if ((char)payload[0] == '1') {
-    digitalWrite(BUILTIN_LED, LOW);   // Turn the LED on (Note that LOW is the voltage level
-    // but actually the LED is on; this is because
-    // it is active low on the ESP-01)
-  } else {
-    digitalWrite(BUILTIN_LED, HIGH);  // Turn the LED off by making the voltage HIGH
-  }
+  // search for offset string
+  char *ptr = strstr((char*)payload, hstring);
+  if (ptr != NULL) /* Substring found */
+  {
+    // convert humidity text value from the mqtt message to float
+    convert = "";
+    ptr += strlen(hstring) + 2;
+    for (int i = 0; i < 6; i++)
+      convert += *ptr++;
+    convert.toCharArray(char1, convert.length() + 1);
+    humid = atof(char1);
+    Serial.println(humid);
 
+    // set dehumidifer_state based on received humidity value
+    if (humid > HUMIDITY_HIGH_LIMIT)
+      if (!dehumidifer_state)  dehumidifer_state = 1;
+      else if (humid < HUMIDITY_LOW_LIMIT)
+        if (dehumidifer_state) dehumidifer_state = 0;
+  }
+  return;
 }
 
+/* connect to a MQTT briker */
 void reconnect() {
   // Loop until we're reconnected
   while (!client.connected()) {
@@ -91,128 +132,134 @@ void reconnect() {
     // Attempt to connect
     if (client.connect(clientId.c_str())) {
       Serial.println("connected");
-      // Once connected, publish an announcement...
-      client.publish("258Thomas/testing", "hello world");
-      // ... and resubscribe
-      client.subscribe("258Thomas/testing");
-    } else {
+      client.subscribe(SUB_TOPIC);
+      Serial.print("listening for messages on topic ");
+      Serial.println(SUB_TOPIC);
+    }
+    else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
-      delay(5000);
+      Serial.println(" try again in 10 seconds");
+      // Wait 10 seconds before retrying
+      delay(10000);
     }
   }
+}
+
+void oled_disp(String text){
+
+
+  return;
 }
 
 void setup() {
-  Serial.begin(115200);
 
-  // connect to a WiFi network
-  setup_wifi();
 
-  // wait for a good time stamp
-  while (get_timestamp()==0) delay(100);
+  pinMode(D0, OUTPUT);                  // initialize the BUILTIN_LED pin as an output
+  pinMode(D3, OUTPUT);                  // use D3  to control power relay 
+  Serial.begin(115200);                 // start the serial interface
+  setup_wifi();                         // connect to wifi
+  timeClient.begin();                   // initialize time client
+  // dht.begin();                          // initialize the DHT22 sensor
+  client.setServer(mqtt_server, 1883);  // initialize MQTT broker
+  client.setCallback(callback);         // set function that executes when a message is received
+  Serial.println();
 
-  // initialize the DHT22 sensor
-  dht.begin();
-
-  // connect to MQTT broker
-  client.setServer(mqtt_server, 1883);
-  client.setCallback(callback);        
-}
-
-// send an NTP request to the time server at the given address
-void sendNTPpacket(IPAddress& address) {
-  // Serial.println("sending NTP packet...");
-  // set all bytes in the buffer to 0
-  memset(packetBuffer, 0, NTP_PACKET_SIZE);
-  // Initialize values needed to form NTP request
-  // (see URL above for details on the packets)
-  packetBuffer[0] = 0b11100011;   // LI, Version, Mode
-  packetBuffer[1] = 0;     // Stratum, or type of clock
-  packetBuffer[2] = 6;     // Polling Interval
-  packetBuffer[3] = 0xEC;  // Peer Clock Precision
-  // 8 bytes of zero for Root Delay & Root Dispersion
-  packetBuffer[12]  = 49;
-  packetBuffer[13]  = 0x4E;
-  packetBuffer[14]  = 49;
-  packetBuffer[15]  = 52;
-
-  // all NTP fields have been given values, now
-  // you can send a packet requesting a timestamp:
-  udp.beginPacket(address, 123); //NTP requests are to port 123
-  udp.write(packetBuffer, NTP_PACKET_SIZE);
-  udp.endPacket();
-}
-
-unsigned long get_timestamp() {
-
-  //get a random server from the pool
-  WiFi.hostByName(ntpServerName, timeServerIP);
-
-  sendNTPpacket(timeServerIP); // send an NTP packet to a time server
-  
-  delay(1000);  // wait to see if a reply is available
-
-  int cb = udp.parsePacket();
-  delay(100);
-  if (!cb) {
-    // Serial.println("no packet yet");
-    delay(100);
-  } 
-  else {
-    // Serial.println("got a packet");
-    // We've received a packet, read the data from it
-    // read the packet into the buffer
-    udp.read(packetBuffer, NTP_PACKET_SIZE); 
-    //the timestamp starts at byte 40 of the received packet and is four bytes,
-    // or two words, long. First, esxtract the two words:
-    unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
-    unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
-    // combine the four bytes (two words) into a long integer
-    // this is NTP time (seconds since Jan 1 1900):
-    unsigned long secsSince1900 = highWord << 16 | lowWord;
-    // now convert NTP time into everyday time:
-    // Unix time starts on Jan 1 1970. In seconds, that's 2208988800:
-    // subtract seventy years:
-    epoch = secsSince1900 - seventyYears;
+ // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;); // Don't proceed, loop forever
   }
 
-  return epoch;
+  // Show initial display buffer contents on the screen --
+  // the library initializes this with an Adafruit splash screen.
+  display.display();
+  delay(2000); // Pause for 2 seconds
+
+  // Clear the buffer
+  display.clearDisplay();
+  display.setTextSize(1);             // Normal 1:1 pixel scale
+  display.setTextColor(WHITE);        // Draw white text
+  display.setCursor(0,0);             // Start at top-left corner
 }
 
 void loop() {
-  unsigned long         tstamp;
-  char                  msg[100];
-  float                 temperature;
+
+  // String                tt;
+  // String                th;
+  String                controller_ready_message;
+  String                con_topic;
+
+  // float                 temperature;
   float                 humidity;
+  unsigned long         epoch;
+  char*                 c_time_string;
+  time_t                unix_time;
 
+  // update the time client
+  timeClient.update();
 
-  Serial.print("connecting to ");
-  Serial.print(mqtt_server);
-  Serial.print(':');
-  Serial.println(port);
-
-  if (client.connected()) {
-  // build MQTT message
-    tstamp = get_timestamp();
-    temperature = dht.readTemperature(true);
-    humidity = dht.readHumidity();
-    if (isnan(temperature) || isnan(humidity)){
-      Serial.println("DTH22 read failed");
-      return;
-    }
-
-    snprintf (msg, 100, "%lu %2.2f %2.2f", tstamp, temperature, humidity);
-    Serial.println(msg);
-    client.publish("258Thomas/testing", msg);
+  // reconnect if necessary
+  if (!client.connected()) {
+    reconnect();
   }
 
-  // Close the connection
-  Serial.println();
-  // Serial.println("closing connection");
-  client.stop();
+  client.loop();
 
-  delay(9000);
+  long now = millis();
+  if (now - lastMsg > LOOP_DELAY) {
+    lastMsg = now;
+    ++value;
+
+    // get the time
+    epoch =  timeClient.getEpochTime();
+    unix_time = static_cast<time_t>(epoch);
+    c_time_string = ctime(&unix_time);
+
+    // remove carriage return
+    char *src, *dst;
+    for (src = dst = c_time_string; *src != '\0'; src++) {
+      *dst = *src;
+      if (*dst != '\n') dst++;
+    }
+    *dst = '\0';
+
+    // Switch on the LED if dehumidifier is on
+    if (dehumidifer_state) {
+      digitalWrite(D0, LOW);   // Turn the LED on (Note that LOW is the voltage level)
+      digitalWrite(D3, HIGH);  // Turn the dehumidifier on 
+
+    } else {
+      digitalWrite(D0, HIGH);   // Turn the LED off by making the voltage HIGH
+      digitalWrite(D3, LOW);    // Turn the dehumidifier off by making the voltage Low
+
+    }
+
+    //update oled display
+    display.clearDisplay();
+    display.setCursor(0,0);             // Start at top-left corner
+    display.println("subscribed to:");
+    display.println(" ");
+    display.println(SUB_TOPIC);
+    display.println(" ");
+
+    controller_ready_message  = c_time_string;
+    if (dehumidifer_state){
+      controller_ready_message += " dehumidifier on ";
+      display.println("dehumidifier on");
+    }
+    else{
+      controller_ready_message += " dehumidifier off ";
+      display.println("dehumidifier off");
+    }
+    controller_ready_message += "controller ready";
+
+    display.display();    // update oled display
+
+    // publish ready message
+    // con_topic = String(PARENT_TOPIC + String("/") + TYPE_TOPIC + String("/") + LOCATION_TOPIC + String("/") + CONTROLER_TOPIC);
+    con_topic = String(PUB_TOPIC);
+    client.publish(con_topic.c_str(), controller_ready_message.c_str());
+  }
 }
+
