@@ -111,7 +111,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
     convert.toCharArray(char1, convert.length() + 1);
     humid = atof(char1);
     Serial.println(humid);
-    display.printf("humidity %2.1f\n");
+    display.printf("humidity %2.1f\n", humid);
+    display.display();
   } 
   else ptr = strstr((char*)payload, t_high);
   if (ptr != NULL) {
