@@ -1,6 +1,6 @@
 /*
   
-  read Adafruit HTU21D-Fsensor and report temperature and humidity
+  read Adafruit HTU21D-F sensor and report temperature and humidity
 
 */
 

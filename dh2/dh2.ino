@@ -16,6 +16,7 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <Adafruit_HTU21DF.h>
 
 #define SCREEN_WIDTH 128                      // OLED display width, in pixels
 #define SCREEN_HEIGHT 64                      // OLED display height, in pixels
@@ -38,6 +39,7 @@ const char* mqtt_server = "192.168.254.221";
 
 #define OLED_RESET     -1         // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+Adafruit_HTU21DF htu;
 
 // ESP8266 GPIO pins 
 static const uint8_t D0   = 16;   // blue led
@@ -131,45 +133,45 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.println();
 //////////////////////////////////////////////////////////////////////
 
-  cmd_ptr = command;
-  ptr = strstr((char*)payload, start_command);
-  if (ptr != NULL) {
-    ptr += strlen(start_command);
-    while (*ptr = ' ') ptr++;   // eat white space
-    while ((*ptr != \0) | (*ptr != ' ')) *cmd_ptr++ = ptr++; // extract command
-    if (cmd_ptr > command){
-      *cmd_ptr = '\0';
-      Serial.print("command >")
-      Serial.print(command);
-      switch (command_type(command)) {
-        case 0: // temperature
-          Serial.println("invalid command");
-          break;
-        case 1: // humidity
-          Serial.println("invalid command");
-          break;
-        case 2: // on 
-          Serial.println("invalid command");
-          break;
-        case 3: // off
-          Serial.println("invalid command");
-          break;
-        case 4: // h_low
-          Serial.println("invalid command");
-          break;
-        case 5: // h_high
-          Serial.println("invalid command");
-          break;
-        case 6: // t_low
-          Serial.println("invalid command");
-          break;
-        case 7: // t_ high
-          Serial.println("invalid command");
-          break;        
-        default:
-          Serial.println("invalid command");
-          break;
-      }
+  // cmd_ptr = command;
+  // ptr = strstr((char*)payload, start_command);
+  // if (ptr != NULL) {
+  //   ptr += strlen(start_command);
+  //   while (*ptr = ' ') ptr++;   // eat white space
+  //   while ((*ptr != \0) | (*ptr != ' ')) *cmd_ptr++ = ptr++; // extract command
+  //   if (cmd_ptr > command){
+  //     *cmd_ptr = '\0';
+  //     Serial.print("command >")
+  //     Serial.print(command);
+  //     switch (command_type(command)) {
+  //       case 0: // temperature
+  //         Serial.println("invalid command");
+  //         break;
+  //       case 1: // humidity
+  //         Serial.println("invalid command");
+  //         break;
+  //       case 2: // on 
+  //         Serial.println("invalid command");
+  //         break;
+  //       case 3: // off
+  //         Serial.println("invalid command");
+  //         break;
+  //       case 4: // h_low
+  //         Serial.println("invalid command");
+  //         break;
+  //       case 5: // h_high
+  //         Serial.println("invalid command");
+  //         break;
+  //       case 6: // t_low
+  //         Serial.println("invalid command");
+  //         break;
+  //       case 7: // t_ high
+  //         Serial.println("invalid command");
+  //         break;        
+  //       default:
+  //         Serial.println("invalid command");
+  //         break;
+  //     }
 
 ///////////////////////////////////////////////////////////////////
  // search for key strings
@@ -244,6 +246,8 @@ void reconnect() {
 
 void setup() {
 
+  float temp, humid;
+
   pinMode(D0, OUTPUT);                  // initialize the BUILTIN_LED pin as an output
   pinMode(D3, OUTPUT);                  // use D3  to control power relay 
   Serial.begin(115200);                 // start the serial interface
@@ -251,6 +255,7 @@ void setup() {
   timeClient.begin();                   // initialize time client
   client.setServer(mqtt_server, 1883);  // initialize MQTT broker
   client.setCallback(callback);         // set function that executes when a message is received
+  htu.begin();                          // initialize HTU21DF sensor
   Serial.println();
 
  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
@@ -260,10 +265,26 @@ void setup() {
   }
   display.display();                  // display buffer Adafruit logo
   delay(2000);                        // Pause for 2 seconds
+  temp = (htu.readTemperature() * 1.8) + 32;
+  humid = htu.readHumidity();
+
+  display.clearDisplay();             // Clear the buffer
+  display.setTextSize(2);             // Normal 1:1 pixel scale
+  display.setTextColor(WHITE);        // Draw white text
+  display.setCursor(0,0);             // Start at top-left corner
+
+  display.print(" T = ");
+  display.println(temp);
+  display.print(" H = ");
+  display.println(humid);
+  display.display();                  // display buffer Adafruit logo
+  delay(2000);    
+
   display.clearDisplay();             // Clear the buffer
   display.setTextSize(1);             // Normal 1:1 pixel scale
   display.setTextColor(WHITE);        // Draw white text
   display.setCursor(0,0);             // Start at top-left corner
+
 }
 
 void loop() {

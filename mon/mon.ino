@@ -1,35 +1,39 @@
 /*
-  periodically read a DHT22 sensor and publish the readings
+  periodically read a HTU21DF sensor and publish the readings
 
 */
 
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
 #include <PubSubClient.h>
-#include <DHT.h>
 #include <NTPClient.h>
 #include <time.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <Adafruit_HTU21DF.h>
+
+#define SCREEN_WIDTH 128                      // OLED display width, in pixels
+#define SCREEN_HEIGHT 64                      // OLED display height, in pixels
 
 const char* ssid = "FrontierHSI";
 const char* password = "";
 const char* mqtt_server = "192.168.254.221";
 
-#define PUB_TOPIC_H             "258Thomas/shop/sensor/dryer/humidity"
-#define PUB_TOPIC_T             "258Thomas/shop/sensor/dryer/temperature"
+#define PUB_TOPIC_H             "258Thomas/shop/dryer/humidity"
+#define PUB_TOPIC_T             "258Thomas/shop/dryer/temperature"
 
 #define MQTT_MESSAGE_SIZE  100
 #define LOOP_DELAY  60000                     // time between readings
 
-#define DHTPIN               13               // pin the DHT22 is connected to
-#define DHTTYPE           DHT22               // DHT 22  (AM2302)
-#define DHT22_OFFSET         -6               // correction added to DHT22 huniudity reading
 
 #define EST_OFFSET   -4                       // convert GMT to EST
 #define NTP_OFFSET   60 * 60 * EST_OFFSET     // In seconds
 #define NTP_INTERVAL 60 * 1000                // In milliseconds
 #define NTP_ADDRESS  "us.pool.ntp.org"
 
-DHT dht(DHTPIN, DHTTYPE, 15);
+#define OLED_RESET     -1         // Reset pin # (or -1 if sharing Arduino reset pin)
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+Adafruit_HTU21DF htu;
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, NTP_ADDRESS, NTP_OFFSET, NTP_INTERVAL);
@@ -102,10 +106,22 @@ void setup() {
   Serial.begin(115200);                 // start the serial interface
   setup_wifi();                         // connect to wifi
   timeClient.begin();                   // initialize time client
-  dht.begin();                          // initialize the DHT22 sensor
+  htu.begin();                          // initialize the DHT22 sensor
   client.setServer(mqtt_server, 1883);  // initialize MQTT broker
   client.setCallback(callback);
+   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;); // Don't proceed, loop forever
+  }
+  display.display();
+  delay(2000); // Pause for 2 seconds
 
+  // Clear the buffer
+  display.clearDisplay();
+  display.setTextSize(1);             // Normal 1:1 pixel scale
+  display.setTextColor(WHITE);        // Draw white text
+  display.setCursor(0,0);             // Start at top-left corner
 }
 
 void loop() {
@@ -133,14 +149,24 @@ void loop() {
     lastMsg = now;
     ++value;
 
-    temperature = dht.readTemperature(true);
-    humidity = dht.readHumidity();
+    temperature = (htu.readTemperature() * 1.8) + 32;
+    humidity = htu.readHumidity();
     if (isnan(temperature) || isnan(humidity)){
-      Serial.println("DTH22 read failed");
+      Serial.println("sensor read failed");
       return;
     }
+    // humidity += float(DHT22_OFFSET);
 
-    humidity += float(DHT22_OFFSET);
+    display.clearDisplay();
+    display.setTextSize(2);             // Normal 1:1 pixel scale
+    display.setTextColor(WHITE);        // Draw white text
+    display.setCursor(0,10);             // Start at top-left corner
+    display.print(" T = ");
+    display.println(temperature);
+    display.print(" H = ");
+    display.println(humidity);
+    display.display();                  // display buffer Adafruit logo
+    // delay(2000);    
 
     // get the time
     epoch =  timeClient.getEpochTime();
