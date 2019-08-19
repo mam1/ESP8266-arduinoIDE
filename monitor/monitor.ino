@@ -16,6 +16,7 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <Adafruit_HTU21DF.h>
 
 #define SCREEN_WIDTH 128                      // OLED display width, in pixels
 #define SCREEN_HEIGHT 64                      // OLED display height, in pixels
@@ -36,6 +37,7 @@ const char* mqtt_server = "192.168.254.221";
 
 #define OLED_RESET     -1         // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+Adafruit_HTU21DF htu;
 
 // ESP8266 GPIO pins 
 static const uint8_t D0   = 16;   // blue led

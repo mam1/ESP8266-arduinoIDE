@@ -1,6 +1,7 @@
 /*
-  control a 120 volt dehumidifier
-
+  listens for a messages containing the humidity value
+  turns a power relay off or on depending on the humidity value and the humidity limits
+  accepts commands to raise or lower humidity limits
 */
 
 #include <stdio.h>
@@ -18,12 +19,12 @@
 
 #define SCREEN_WIDTH 128                      // OLED display width, in pixels
 #define SCREEN_HEIGHT 64                      // OLED display height, in pixels
-#define SUB_TOPIC             "258Thomas/shop/dryer/#"
+#define SUB_TOPIC             "258Thomas/shop/dryer/sensor/#"
 #define PUB_TOPIC             "258Thomas/shop/dryer/controller/dehumidifier"
 #define MQTT_MESSAGE_SIZE   100               // max size of mqtt message
 #define LOOP_DELAY          60000             // time between readings
-#define HUMIDITY_HIGH_LIMIT 70                // turn dehumidifier on
-#define HUMIDITY_LOW_LIMIT  55                // tune dehumidifier off
+#define HUMIDITY_HIGH_LIMIT 64                // turn dehumidifier on
+#define HUMIDITY_LOW_LIMIT  61                // turn dehumidifier off
 #define EST_OFFSET   -4                       // convert GMT to EST
 #define NTP_OFFSET   60 * 60 * EST_OFFSET     // In seconds
 #define NTP_INTERVAL 60 * 1000                // In milliseconds
@@ -36,7 +37,7 @@ const char* mqtt_server = "192.168.254.221";
 #define OLED_RESET     -1         // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// ESP8266 GPIO pins 
+// ESP8266 GPIO pins
 static const uint8_t D0   = 16;   // blue led
 static const uint8_t D1   = 5;    // SCL
 static const uint8_t D2   = 4;    // SDA
@@ -58,6 +59,7 @@ long        lastMsg = 0;
 char        msg[MQTT_MESSAGE_SIZE];
 int         value = 0;
 int         dehumidifer_state = 0;
+int         controller_state = 2;     // 0-manual off, 1-manual on, 2-auto
 float low_humid = HUMIDITY_LOW_LIMIT;
 float high_humid = HUMIDITY_HIGH_LIMIT;
 
@@ -87,6 +89,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
   char          t_humid[] = "humidity";
   char          t_high[] = "high";
   char          t_low[] = "low";
+  char          t_on[] = "on";
+  char          t_off[] = "off";
+  char          t_auto[] = "auto";
   String        convert;
   char          char1[8];
   float         humid;
@@ -100,21 +105,46 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
   Serial.println();
 
- // search for key strings
-  ptr = strstr((char*)payload, t_humid);
+// process message
+  ptr = strstr((char*)payload, t_humid); // search for "humidity"
   if (ptr != NULL) {
-    // convert humidity text value from the mqtt message to float
-    convert = "";
-    ptr += strlen(t_humid) + 2;
-    for (int i = 0; i < 6; i++)
-      convert += *ptr++;
-    convert.toCharArray(char1, convert.length() + 1);
-    humid = atof(char1);
     Serial.println(humid);
     display.printf("humidity %2.1f\n", humid);
     display.display();
-  } 
-  else ptr = strstr((char*)payload, t_high);
+    if (controller_state == 2) {
+      // convert humidity text value from the mqtt message to float
+      convert = "";
+      ptr += strlen(t_humid) + 2;
+      for (int i = 0; i < 6; i++)
+        convert += *ptr++;
+      convert.toCharArray(char1, convert.length() + 1);
+      humid = atof(char1);
+
+      // set dehumidifer_state based on humidity value
+      if (humid > high_humid) {
+        dehumidifer_state = 1;
+        digitalWrite(D3, HIGH);    // Turn the dehumidifier on
+        send_ready();
+        return;
+      }
+
+      if (humid < low_humid) {
+        dehumidifer_state = 0;
+        digitalWrite(D3, LOW);  // Turn the dehumidifier off
+        send_ready();
+        return;
+      }
+
+      if (humid > low_humid) {
+        dehumidifer_state = 0;
+        digitalWrite(D3, LOW);  // Turn the dehumidifier off
+        send_ready();
+        return;
+      }
+    }
+  }
+
+  ptr = strstr((char*)payload, t_high); // search for "high"
   if (ptr != NULL) {
     // convert high text value from the mqtt message to float
     convert = "";
@@ -126,7 +156,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     Serial.println(high_humid);
   }
 
-  else ptr = strstr((char*)payload, t_low);
+  ptr = strstr((char*)payload, t_low);  // search for "low"
   if (ptr != NULL) {
     // convert humidity low value from the mqtt message to float
     convert = "";
@@ -135,13 +165,29 @@ void callback(char* topic, byte* payload, unsigned int length) {
       convert += *ptr++;
     convert.toCharArray(char1, convert.length() + 1);
     low_humid = atof(char1);
-  
-    // set dehumidifer_state based on received humidity value
-    if (humid > high_humid)
-      if (!dehumidifer_state)  dehumidifer_state = 1;
-      else if (humid < low_humid)
-        if (dehumidifer_state) dehumidifer_state = 0;
   }
+
+  ptr = strstr((char*)payload, t_off);  // search for "off"
+  if (ptr != NULL) {
+    controller_state = 0;
+    dehumidifer_state = 0;
+    digitalWrite(D3, LOW);  // Turn the dehumidifier on
+    send_ready();
+  }
+
+  ptr = strstr((char*)payload, t_on);  // search for "on"
+  if (ptr != NULL) {
+    controller_state = 1;
+    dehumidifer_state = 1;
+    digitalWrite(D3, HIGH);  // Turn the dehumidifier on
+    send_ready();
+  }
+
+  ptr = strstr((char*)payload, t_auto);  // search for "auto"
+  if (ptr != NULL) {
+    controller_state = 2;
+  }
+
   return;
 }
 
@@ -170,10 +216,59 @@ void reconnect() {
   }
 }
 
+void send_ready() {
+  unsigned long         epoch;
+  char*                 c_time_string;
+  time_t                unix_time;
+  String                controller_ready_message;
+  String                con_topic;
+  float                 humidity;
+
+  // get the time
+  epoch =  timeClient.getEpochTime();
+  unix_time = static_cast<time_t>(epoch);
+  c_time_string = ctime(&unix_time);
+
+  // remove carriage return
+  char *src, *dst;
+  for (src = dst = c_time_string; *src != '\0'; src++) {
+    *dst = *src;
+    if (*dst != '\n') dst++;
+  }
+  *dst = '\0';
+
+  display.clearDisplay();
+  display.setCursor(0, 0);            // Start at top-left corner
+  display.println(SUB_TOPIC);
+  display.println(" ");
+  display.printf("\n%2.1f - %2.1f\n", high_humid, low_humid);
+  display.display();    // update oled display
+
+  controller_ready_message  = c_time_string;  // load time stamp
+  if (dehumidifer_state) {
+    controller_ready_message += " dehumidifier on ";
+    display.println("dehumidifier on");
+  }
+  else {
+    controller_ready_message += " dehumidifier off ";
+    display.println("dehumidifier off");
+  }
+  controller_ready_message += high_humid;
+  controller_ready_message += " - ";
+  controller_ready_message += low_humid;
+  controller_ready_message += " controller ready";
+
+  // publish ready message
+  con_topic = String(PUB_TOPIC);
+  client.publish(con_topic.c_str(), controller_ready_message.c_str());
+
+  return;
+}
+
 void setup() {
 
   pinMode(D0, OUTPUT);                  // initialize the BUILTIN_LED pin as an output
-  pinMode(D3, OUTPUT);                  // use D3  to control power relay 
+  pinMode(D3, OUTPUT);                  // use D3  to control power relay
   Serial.begin(115200);                 // start the serial interface
   setup_wifi();                         // connect to wifi
   timeClient.begin();                   // initialize time client
@@ -181,29 +276,20 @@ void setup() {
   client.setCallback(callback);         // set function that executes when a message is received
   Serial.println();
 
- // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
-  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
+// SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("SSD1306 allocation failed"));
-    for(;;); // Don't proceed, loop forever
+    for (;;); // Don't proceed, loop forever
   }
   display.display();                  // display buffer Adafruit logo
   delay(2000);                        // Pause for 2 seconds
   display.clearDisplay();             // Clear the buffer
   display.setTextSize(1);             // Normal 1:1 pixel scale
   display.setTextColor(WHITE);        // Draw white text
-  display.setCursor(0,0);             // Start at top-left corner
+  display.setCursor(0, 0);            // Start at top-left corner
 }
 
 void loop() {
-
-  String                controller_ready_message;
-  String                con_topic;
-
-  // float                 temperature;
-  float                 humidity;
-  unsigned long         epoch;
-  char*                 c_time_string;
-  time_t                unix_time;
 
   // update the time client
   timeClient.update();
@@ -220,57 +306,11 @@ void loop() {
     lastMsg = now;
     ++value;
 
-    // get the time
-    epoch =  timeClient.getEpochTime();
-    unix_time = static_cast<time_t>(epoch);
-    c_time_string = ctime(&unix_time);
+    send_ready();
 
-    // remove carriage return
-    char *src, *dst;
-    for (src = dst = c_time_string; *src != '\0'; src++) {
-      *dst = *src;
-      if (*dst != '\n') dst++;
-    }
-    *dst = '\0';
 
-    // Switch on the LED if dehumidifier is on
-    if (dehumidifer_state) {
-      digitalWrite(D0, LOW);   // Turn the LED on (Note that LOW is the voltage level)
-      digitalWrite(D3, HIGH);  // Turn the dehumidifier on 
-    } 
-    else {
-      digitalWrite(D0, HIGH);   // Turn the LED off by making the voltage HIGH
-      digitalWrite(D3, LOW);    // Turn the dehumidifier off by making the voltage Low
-    }
 
-    //update oled display
-    display.clearDisplay();
-    display.setCursor(0,0);             // Start at top-left corner
-    display.println(SUB_TOPIC);
-    display.println(" ");
-    controller_ready_message  = c_time_string;  // load time stamp
 
-    if (dehumidifer_state){
-      controller_ready_message += " dehumidifier on ";
-      display.println("dehumidifier on");
-    }
-    else{
-      controller_ready_message += " dehumidifier off ";
-      display.println("dehumidifier off");
-
-    }
-    display.printf("\n%2.1f - %2.1f\n", high_humid, low_humid);
-
-    controller_ready_message += high_humid;
-    controller_ready_message += " - ";
-    controller_ready_message += low_humid;
-    controller_ready_message += " controller ready";
-
-    display.display();    // update oled display
-
-    // publish ready message
-    con_topic = String(PUB_TOPIC);
-    client.publish(con_topic.c_str(), controller_ready_message.c_str());
   }
 }
 

@@ -1,5 +1,7 @@
 /*
-  periodically read a HTU21DF sensor and publish the readings
+  periodically read a HTU21DF sensor 
+  publish the readings to a MQTT broker
+  update values on OLED display
 
 */
 
@@ -19,8 +21,8 @@ const char* ssid = "FrontierHSI";
 const char* password = "";
 const char* mqtt_server = "192.168.254.221";
 
-#define PUB_TOPIC_H             "258Thomas/shop/dryer/humidity"
-#define PUB_TOPIC_T             "258Thomas/shop/dryer/temperature"
+#define PUB_TOPIC_H             "258Thomas/shop/dryer/sensor/humidity"
+#define PUB_TOPIC_T             "258Thomas/shop/dryer/sensor/temperature"
 
 #define MQTT_MESSAGE_SIZE  100
 #define LOOP_DELAY  60000                     // time between readings
@@ -126,8 +128,6 @@ void setup() {
 
 void loop() {
 
-  // String                tt;
-  // String                th;
   float                 temperature;
   float                 humidity;
   unsigned long         epoch;
@@ -158,15 +158,14 @@ void loop() {
     // humidity += float(DHT22_OFFSET);
 
     display.clearDisplay();
-    display.setTextSize(2);             // Normal 1:1 pixel scale
+    display.setTextSize(2);             
     display.setTextColor(WHITE);        // Draw white text
-    display.setCursor(0,10);             // Start at top-left corner
+    display.setCursor(0,15);             
     display.print(" T = ");
     display.println(temperature);
     display.print(" H = ");
     display.println(humidity);
-    display.display();                  // display buffer Adafruit logo
-    // delay(2000);    
+    display.display();                  
 
     // get the time
     epoch =  timeClient.getEpochTime();
