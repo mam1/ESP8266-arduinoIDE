@@ -1,7 +1,16 @@
 /*
-  listens for a messages containing the humidity value
-  turns a power relay off or on depending on the humidity value and the humidity limits
+
+  listens for a messages from the dryer containing a humidity value
+  accepts command to automatically turn a power relay off or on depending on the humidity value and the humidity limits
   accepts commands to raise or lower humidity limits
+  accepts command to manually turn the relay off or on
+
+  off
+  on
+  auto
+  low xx.xx
+  high xx.xx
+
 */
 
 #include <stdio.h>
@@ -20,7 +29,7 @@
 #define SCREEN_WIDTH 128                      // OLED display width, in pixels
 #define SCREEN_HEIGHT 64                      // OLED display height, in pixels
 #define SUB_TOPIC             "258Thomas/shop/dryer/sensor/#"
-#define PUB_TOPIC             "258Thomas/shop/dryer/controller/dehumidifier"
+#define PUB_TOPIC             "258Thomas/shop/dryer/controller"
 #define MQTT_MESSAGE_SIZE   100               // max size of mqtt message
 #define LOOP_DELAY          60000             // time between readings
 #define HUMIDITY_HIGH_LIMIT 64                // turn dehumidifier on
@@ -59,7 +68,7 @@ long        lastMsg = 0;
 char        msg[MQTT_MESSAGE_SIZE];
 int         value = 0;
 int         dehumidifer_state = 0;
-int         controller_state = 2;     // 0-manual off, 1-manual on, 2-auto
+int         controller_mode = 2;     // 0-manual off, 1-manual on, 2-auto
 float low_humid = HUMIDITY_LOW_LIMIT;
 float high_humid = HUMIDITY_HIGH_LIMIT;
 
@@ -108,10 +117,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 // process message
   ptr = strstr((char*)payload, t_humid); // search for "humidity"
   if (ptr != NULL) {
-    Serial.println(humid);
-    display.printf("humidity %2.1f\n", humid);
-    display.display();
-    if (controller_state == 2) {
+    if (controller_mode == 2) {
       // convert humidity text value from the mqtt message to float
       convert = "";
       ptr += strlen(t_humid) + 2;
@@ -119,29 +125,34 @@ void callback(char* topic, byte* payload, unsigned int length) {
         convert += *ptr++;
       convert.toCharArray(char1, convert.length() + 1);
       humid = atof(char1);
+      Serial.printf("humidity %2.1f\n", humid);
 
       // set dehumidifer_state based on humidity value
       if (humid > high_humid) {
         dehumidifer_state = 1;
         digitalWrite(D3, HIGH);    // Turn the dehumidifier on
-        send_ready();
+        Serial.println("turn on");
+        pub_ready();
         return;
       }
 
       if (humid < low_humid) {
         dehumidifer_state = 0;
         digitalWrite(D3, LOW);  // Turn the dehumidifier off
-        send_ready();
+        Serial.println("turn off");
+        pub_ready();
         return;
       }
 
       if (humid > low_humid) {
         dehumidifer_state = 0;
         digitalWrite(D3, LOW);  // Turn the dehumidifier off
-        send_ready();
+        Serial.println("turn off");
+        pub_ready();
         return;
       }
     }
+    Serial.println("manual mode");
   }
 
   ptr = strstr((char*)payload, t_high); // search for "high"
@@ -153,6 +164,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
       convert += *ptr++;
     convert.toCharArray(char1, convert.length() + 1);
     high_humid = atof(char1);
+    pub_ready();
     Serial.println(high_humid);
   }
 
@@ -165,27 +177,34 @@ void callback(char* topic, byte* payload, unsigned int length) {
       convert += *ptr++;
     convert.toCharArray(char1, convert.length() + 1);
     low_humid = atof(char1);
+    pub_ready();
+    Serial.println(high_humid);
+
   }
 
   ptr = strstr((char*)payload, t_off);  // search for "off"
   if (ptr != NULL) {
-    controller_state = 0;
+    controller_mode = 0;
     dehumidifer_state = 0;
-    digitalWrite(D3, LOW);  // Turn the dehumidifier on
-    send_ready();
+    Serial.println("manual turn off");
+    digitalWrite(D3, LOW);  // Turn the dehumidifier off
+    pub_ready();
   }
 
   ptr = strstr((char*)payload, t_on);  // search for "on"
   if (ptr != NULL) {
-    controller_state = 1;
+    controller_mode = 1;
     dehumidifer_state = 1;
+    Serial.println("manual turn on");
     digitalWrite(D3, HIGH);  // Turn the dehumidifier on
-    send_ready();
+    pub_ready();
   }
 
   ptr = strstr((char*)payload, t_auto);  // search for "auto"
   if (ptr != NULL) {
-    controller_state = 2;
+    controller_mode = 2;
+    Serial.println("auto mode");
+    pub_ready();
   }
 
   return;
@@ -216,7 +235,7 @@ void reconnect() {
   }
 }
 
-void send_ready() {
+void pub_ready() {
   unsigned long         epoch;
   char*                 c_time_string;
   time_t                unix_time;
@@ -224,6 +243,7 @@ void send_ready() {
   String                con_topic;
   float                 humidity;
 
+Serial.println("pub_ready called");
   // get the time
   epoch =  timeClient.getEpochTime();
   unix_time = static_cast<time_t>(epoch);
@@ -246,17 +266,21 @@ void send_ready() {
 
   controller_ready_message  = c_time_string;  // load time stamp
   if (dehumidifer_state) {
-    controller_ready_message += " dehumidifier on ";
+    controller_ready_message += ", dehumidifier on, ";
     display.println("dehumidifier on");
   }
   else {
-    controller_ready_message += " dehumidifier off ";
+    controller_ready_message += ", dehumidifier off, ";
     display.println("dehumidifier off");
   }
+
+  controller_ready_message += "mode ";
+  controller_ready_message += controller_mode;
+  controller_ready_message += ", ";
   controller_ready_message += high_humid;
-  controller_ready_message += " - ";
+  controller_ready_message += "-";
   controller_ready_message += low_humid;
-  controller_ready_message += " controller ready";
+  controller_ready_message += ", controller ready";
 
   // publish ready message
   con_topic = String(PUB_TOPIC);
@@ -306,11 +330,7 @@ void loop() {
     lastMsg = now;
     ++value;
 
-    send_ready();
-
-
-
-
+    pub_ready();
   }
 }
 
