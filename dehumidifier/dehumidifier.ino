@@ -1,15 +1,15 @@
 /*
 
-  listens for a messages from the dryer containing a humidity value
+  listens for a messages from the dryer that contain a humidity value
   accepts command to automatically turn a power relay off or on depending on the humidity value and the humidity limits
   accepts commands to raise or lower humidity limits
   accepts command to manually turn the relay off or on
 
-  off
-  on
-  auto
-  low xx.xx
-  high xx.xx
+  off  - turn relay off and swithch to manual mode
+  on   - turn relay on and swithch to manual mode
+  auto - automatically turn a power relay off or on depending on the humidity value and the humidity limits
+  h_low xx.xx   - set low humidity limit
+  h_high xx.xx  - set high humidity limit
 
 */
 
