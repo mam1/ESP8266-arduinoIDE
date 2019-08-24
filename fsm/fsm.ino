@@ -33,6 +33,8 @@
 #define OFF 		0
 #define AUTO 		2
 #define MANUAL		1
+#define TRUE 		1
+#define FALSE 		-1
 
 #define MAX_COMMAND_SIZE 	100
 #define CMD_TYPES			9
@@ -55,7 +57,7 @@
 
 char 				*message;
 typedef struct {
-	int 			loaded;
+	int 			initialized;
 	int 			mode;
 	int 			state;
 	float			high;
@@ -66,28 +68,6 @@ CONTROLBLOCK 		persist;
 CONTROLBLOCK 		*cbptr;
 int 				control_block_size;
 
-
-
-
-template <class T> int EEPROM_writeAnything(int ee, const T& value)
-{
-	const byte* p = (const byte*)(const void*)&value;
-	int i;
-	for (i = 0; i < sizeof(value); i++)
-		EEPROM.write(ee++, *p++);
-	return i;
-}
-
-template <class T> int EEPROM_readAnything(int ee, T& value)
-{
-	byte* p = (byte*)(void*)&value;
-	int i;
-	for (i = 0; i < sizeof(value); i++)
-		*p++ = EEPROM.read(ee++);
-	return i;
-}
-
-
 void save_controller_state(CONTROLBLOCK * ptr) {
 
 	const byte* p = (const byte*)(const void*)ptr;
@@ -95,6 +75,7 @@ void save_controller_state(CONTROLBLOCK * ptr) {
 	int ee = 0;
 	for (i = 0; i < control_block_size; i++)
 		EEPROM.write(ee++, *p++);
+	EEPROM.commit();
 	return;
 }
 
@@ -144,7 +125,7 @@ int get_command_type(char *sptr) {
 		if (index != NULL)
 			return i;
 	}
-	return NULL;
+	return -1;
 }
 
 void setup() {
@@ -152,15 +133,19 @@ void setup() {
 	Serial.begin(115200);                	// start the serial interface
 	control_block_size = sizeof(persist);
 	EEPROM.begin(control_block_size); 		// grab some flash memory
+		Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized, persist.mode, persist.state, persist.high, persist.low);
 	get_contoller_state(&persist);
-	if (persist.loaded != true) {
-		persist.loaded = true;
+	if (persist.initialized != TRUE) {
+		persist.initialized = TRUE;
 		persist.mode = MANUAL;
 		persist.state = OFF;
 		persist.high = HUMIDITY_HIGH_LIMIT;
 		persist.low = HUMIDITY_LOW_LIMIT;
 		save_controller_state(&persist);
 	}
+	get_contoller_state(&persist);
+
+	Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized, persist.mode, persist.state, persist.high, persist.low);
 
 	delay(1000);
 	Serial.println(" ");
@@ -172,8 +157,8 @@ void loop() {
 	char    command[MAX_COMMAND_SIZE];
 	int 	command_type;
 
-
-	strcpy(command, "h_high 45.23");
+	Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized, persist.mode, persist.state, persist.high, persist.low);
+	strcpy(command, "h_low 45.23");
 	Serial.printf("input string <%s>\n", command);
 	command_type = get_command_type(command);
 	Serial.printf("command type %i found\n", command_type);
@@ -197,6 +182,15 @@ void loop() {
 			break;
 		case 4:	// h_low
 			Serial.println("set low limit");
+			persist.low = 45;
+			Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized, persist.mode, persist.state, persist.high, persist.low);
+			save_controller_state(&persist);
+			persist.low = 99;
+			Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized, persist.mode, persist.state, persist.high, persist.low);
+
+			get_contoller_state(&persist);
+			Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized, persist.mode, persist.state, persist.high, persist.low);
+
 			break;
 		case 5:	// h_high
 			Serial.println("set high limit");
@@ -216,7 +210,10 @@ void loop() {
 			break;
 		}
 	Serial.printf("state = %i, mode = %i,  - looping", persist.state, persist.mode);
-	delay(20000);
+
+	save_controller_state(&persist);
+	delay(40000);
+
 
 
 }
