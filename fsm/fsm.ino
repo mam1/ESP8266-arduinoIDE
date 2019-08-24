@@ -55,7 +55,7 @@
 #define NTP_ADDRESS  "us.pool.ntp.org"        // time server
 #define CONTROLBLOCK_SIZE 
 
-char 				*message;
+// char 				*message;
 typedef struct {
 	int 			initialized;
 	int 			mode;
@@ -106,15 +106,14 @@ int get_command_type(char *sptr) {
 	char  			*index;
 	int 			i;
 
-	/* command list */
 	char 	command[MAX_COMMAND_SIZE + 1], *cmd_ptr;
 	char    *keyword[CMD_TYPES] = {
 		/*  0 */    "temperature",
 		/*  1 */    "humidity",
 		/*  2 */    "on",
 		/*  3 */    "off",
-		/*  4 */    "h_low",
-		/*  5 */    "h_high",
+		/*  4 */    "low",
+		/*  5 */    "high",
 		/*  6 */    "t_low",
 		/*  7 */    "t_high",
 		/*  8 */	"auto"
@@ -132,10 +131,9 @@ void setup() {
 
 	Serial.begin(115200);                	// start the serial interface
 	control_block_size = sizeof(persist);
-	EEPROM.begin(control_block_size); 		// grab some flash memory
-		Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized, persist.mode, persist.state, persist.high, persist.low);
-	get_contoller_state(&persist);
-	if (persist.initialized != TRUE) {
+	EEPROM.begin(control_block_size); 		// define some flash memory
+	get_contoller_state(&persist);			// load control block from flash
+	if (persist.initialized != TRUE) {		// initialize control block if necessary
 		persist.initialized = TRUE;
 		persist.mode = MANUAL;
 		persist.state = OFF;
@@ -144,20 +142,17 @@ void setup() {
 		save_controller_state(&persist);
 	}
 	get_contoller_state(&persist);
-
-	Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized, persist.mode, persist.state, persist.high, persist.low);
-
-	delay(1000);
 	Serial.println(" ");
 	Serial.println(" ");
 	Serial.println("starting");
+	Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized, 
+		persist.mode, persist.state, persist.high, persist.low);
 }
 
 void loop() {
 	char    command[MAX_COMMAND_SIZE];
 	int 	command_type;
 
-	Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized, persist.mode, persist.state, persist.high, persist.low);
 	strcpy(command, "h_low 45.23");
 	Serial.printf("input string <%s>\n", command);
 	command_type = get_command_type(command);
@@ -180,20 +175,18 @@ void loop() {
 			persist.mode = MANUAL;
 			persist.state = OFF;
 			break;
-		case 4:	// h_low
-			Serial.println("set low limit");
+		case 4:	// low
+			Serial.println("set low humidity limit");
 			persist.low = 45;
-			Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized, persist.mode, persist.state, persist.high, persist.low);
 			save_controller_state(&persist);
-			persist.low = 99;
-			Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized, persist.mode, persist.state, persist.high, persist.low);
-
-			get_contoller_state(&persist);
-			Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized, persist.mode, persist.state, persist.high, persist.low);
-
+			Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized, 
+				persist.mode, persist.state, persist.high, persist.low);
 			break;
 		case 5:	// h_high
-			Serial.println("set high limit");
+			Serial.println("set high humidity limit");
+			save_controller_state(&persist);
+			Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized, 
+				persist.mode, persist.state, persist.high, persist.low);
 			break;
 		// case 6:	// t_low
 		//   Serial.println("invalid command");
