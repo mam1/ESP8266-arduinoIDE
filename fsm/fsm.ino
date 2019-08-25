@@ -259,22 +259,23 @@ void pub_ready() {
 	display.display();    // update oled display
 
 	controller_ready_message  = c_time_string;  // load time stamp
-	if (persist.state) {
-		controller_ready_message += ", dehumidifier on, ";
-		display.println("dehumidifier on");
-	}
-	else {
-		controller_ready_message += ", dehumidifier off, ";
-		display.println("dehumidifier off");
-	}
+	controller_ready_message += build_ready;
+	// if (persist.state) {
+	// 	controller_ready_message += ", dehumidifier on, ";
+	// 	display.println("dehumidifier on");
+	// }
+	// else {
+	// 	controller_ready_message += ", dehumidifier off, ";
+	// 	display.println("dehumidifier off");
+	// }
 
-	controller_ready_message += "mode ";
-	controller_ready_message += persist.mode;
-	controller_ready_message += ", ";
-	controller_ready_message += persist.high;
-	controller_ready_message += "-";
-	controller_ready_message += persist.low;
-	controller_ready_message += ", controller ready";
+	// controller_ready_message += "mode ";
+	// controller_ready_message += persist.mode;
+	// controller_ready_message += ", ";
+	// controller_ready_message += persist.high;
+	// controller_ready_message += "-";
+	// controller_ready_message += persist.low;
+	// controller_ready_message += ", controller ready";
 
 	// publish ready message
 	con_topic = String(PUB_TOPIC);
@@ -283,6 +284,40 @@ void pub_ready() {
 	return;
 }
 
+/* build the controller ready message */
+String build_ready(String s){
+	String 		mess;
+
+	mess  = c_time_string;  // load time stamp
+	if (persist.state) {
+		mess += ", dehumidifier on, ";
+		display.println("dehumidifier on");
+	}
+	else {
+		mess += ", dehumidifier off, ";
+		display.println("dehumidifier off");
+	}
+
+	switch(persist.mode){ // 0-manual off, 1-manual on, 2-auto
+		case 0:
+			mess += "manual control,";
+			break;
+		case 1:
+			mess+= "manual control, "
+		case 2:
+			mess += "auto control"
+		default:
+			
+		mess += "mode ";
+	mess += persist.mode;
+	mess += ", ";
+	mess += persist.high;
+	mess += "-";
+	mess += persist.low;
+	mess += ", controller ready";
+
+
+}
 /* called when a message is received */
 void callback(char* topic, byte* payload, unsigned int length) {
 	int 			index;
