@@ -76,16 +76,16 @@ static const uint8_t D9   = 3;
 static const uint8_t D10  = 1;
 
 char  command[MAX_COMMAND_SIZE + 1], *cmd_ptr;
-char    *keyword[CMD_TYPES] = {
+String    keyword[CMD_TYPES] = {
   /*  0 */    "temperature",
   /*  1 */    "humidity",
   /*  2 */    "on",
   /*  3 */    "off",
   /*  4 */    "low",
   /*  5 */    "high",
-  /*  6 */    "t_low",
-  /*  7 */    "t_high",
-  /*  8 */  "auto"
+  /*  6 */    "status",
+  /*  7 */    "????",
+  /*  8 */    "auto"
 };
 
 WiFiUDP ntpUDP;
@@ -183,25 +183,38 @@ float t_to_f(char *ptr) {
 
 int get_command_type(char *sptr) {
   char        *index;
-  int       i;
+  int         i;
 
   for (i = 0; i < CMD_TYPES; i++) {
-    index = (char*)strstr(sptr, keyword[i]);
-    if (index != NULL)
+    index = strstr(sptr, keyword[i].c_str());
+    if (index != NULL){
+      Serial.printf("command char <%c>\n", *index);
       return i;
+    }
   }
   return -1;
 }
 
-float get_command_value(char *sptr) {
+float get_command_value(char *sptr, char* testc) {
   float       value;
-  int       index;
-  char      *ptr;
+  int         index;
+  char        *ptr;
 
-  ptr = strstr(sptr, keyword[1]);
-  ptr +=  strlen(keyword[1]);
+  ptr = strstr(sptr, testc);
+
+  // return 33.33;
+
+  Serial.printf("first char in key word <%c>\n",*ptr);
+
+// return 22.22;
+  ptr +=  strlen(keyword[1].c_str());
+    Serial.printf("first char after key word <%c>\n",*ptr);
+  // return 11.11;
+
   while (*ptr == ' ') ptr++;
-  return t_to_f(ptr);
+  Serial.printf("first byte fed to t_to_f <%c>\n",*ptr);
+  Serial.printf("second byte fed to t_to_f <%c>\n",*(ptr+1));
+  return 11.11;  //t_to_f(ptr);
 };
 
 /* connect ti a MQTT broker */
@@ -300,21 +313,22 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
   Serial.println();
   command_type = get_command_type((char *)payload);
-  if (command_type != NULL)
+  Serial.printf("command type %i\n", command_type);
+  if (command_type != -1)
     switch (command_type) {
-      // case 0:  // temperature
-      //  Serial.println("invalid command");
+      case 0:  // temperature
       break;
     case 1: // humidity
       Serial.println("humidity reading");
-      humid = get_command_value((char *)payload);
+      humid = get_command_value((char *)payload, "humidity");
       if (persist.mode == 2) {
         Serial.printf("humidity %2.1f\n", humid);
 
-        // set \persist.state based on humidity value
+        // set persist.state based on humidity value
         if (humid > persist.high) {
           persist.state = 1;
           digitalWrite(D3, HIGH);    // Turn the dehumidifier on
+          digitalWrite(D0, LOW);     // turn off the led
           persist.state = ON;
           save_controller_state(&persist);
           Serial.println("turn on");
@@ -344,23 +358,24 @@ void callback(char* topic, byte* payload, unsigned int length) {
           return;
         }
       }
-
       break;
     case 2: // on
       Serial.println("mode is manual force on");
       persist.mode = MANUAL;
       persist.state = ON;
       digitalWrite(D3, HIGH);  // Turn the dehumidifier on
+      digitalWrite(D0, LOW);   // Turn the LED on
       save_controller_state(&persist);
       Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized,
-                    persist.mode, persist.state, persist.high, persist.low);
+        persist.mode, persist.state, persist.high, persist.low);
       pub_ready();
       break;
     case 3: // off
       Serial.println("mode is manual force off");
       persist.mode = MANUAL;
       persist.state = OFF;
-      digitalWrite(D3, LOW);  // Turn the dehumidifier off
+      digitalWrite(D3, LOW);    // Turn the dehumidifier off
+      digitalWrite(D0, HIGH);   // Turn the LED off
       save_controller_state(&persist);
       Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized,
                     persist.mode, persist.state, persist.high, persist.low);
@@ -368,31 +383,39 @@ void callback(char* topic, byte* payload, unsigned int length) {
       break;
     case 4: // low
       Serial.println("set low humidity limit");
-      persist.low = t_to_f((char *)payload);
+      // Serial.printf("get humidity value > %2.2f\n", get_command_value((char *)payload));
+      char    *tptr;
+      tptr = (char*)payload;
+      Serial.print("payload <");
+      while(*tptr != '\0') Serial.print(*tptr++);
+      Serial.println(">");
+      Serial.printf("command value %2.2f\n", get_command_value((char *)payload, "low"));
+      persist.low = get_command_value((char *)payload, "low");  
       save_controller_state(&persist);
       Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized,
-                    persist.mode, persist.state, persist.high, persist.low);
+        persist.mode, persist.state, persist.high, persist.low);
       pub_ready();
       break;
-    case 5: // h_high
+    case 5: // high
       Serial.println("set high humidity limit");
       save_controller_state(&persist);
       Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized,
-                    persist.mode, persist.state, persist.high, persist.low);
+        persist.mode, persist.state, persist.high, persist.low);
       pub_ready();
       break;
-    // case 6:  // t_low
-    //   Serial.println("invalid command");
-    //   break;
-    // case 7:  // t_ high
-    //   Serial.println("invalid command");
-    // break;
+    case 6:  // status
+      Serial.print("system status - ");
+      Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized,
+        persist.mode, persist.state, persist.high, persist.low);
+      break;
+    case 7:  // t_ high
+    break;
     case 8: // auto
       Serial.println("mode is auto");
       persist.mode = AUTO;
       save_controller_state(&persist);
       Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized,
-                    persist.mode, persist.state, persist.high, persist.low);
+        persist.mode, persist.state, persist.high, persist.low);
       pub_ready();
       break;
     default:
@@ -407,19 +430,22 @@ void setup() {
   Serial.begin(115200);                 // start the serial interface
   control_block_size = sizeof(persist);
   EEPROM.begin(control_block_size);     // define some flash memory
-  get_contoller_state(&persist);      // load control block from flash
+  get_contoller_state(&persist);        // load control block from flash
   if (persist.initialized != TRUE) {    // initialize control block if necessary
     persist.initialized = TRUE;
     persist.mode = MANUAL;
     persist.state = OFF;
     persist.high = HUMIDITY_HIGH_LIMIT;
     persist.low = HUMIDITY_LOW_LIMIT;
-    save_controller_state(&persist);  // save control block
+    save_controller_state(&persist);    // save control block
   }
   get_contoller_state(&persist);
 
-  pinMode(D0, OUTPUT);                  // initialize the BUILTIN_LED pin as an output
+  pinMode(D0, OUTPUT);                  // use D0 to cotroll builtin LED
   pinMode(D3, OUTPUT);                  // use D3  to control power relay
+  digitalWrite(D0, HIGH);               //turn off the led
+  digitalWrite(D3, LOW);                //turn off the relay
+
   setup_wifi();                         // connect to wifi
   timeClient.begin();                   // initialize time client
   client.setServer(mqtt_server, 1883);  // initialize MQTT broker
