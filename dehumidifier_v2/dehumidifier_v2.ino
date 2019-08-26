@@ -8,8 +8,8 @@
   off  - turn relay off and swithch to manual mode
   on   - turn relay on and swithch to manual mode
   auto - automatically turn a power relay off or on depending on the humidity value and the humidity limits
-  h_low xx.xx   - set low humidity limit
-  h_high xx.xx  - set high humidity limit
+  low xx.xx   - set low humidity limit
+  high xx.xx  - set high humidity limit
 
 */
 
