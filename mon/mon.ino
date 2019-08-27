@@ -21,8 +21,8 @@ const char* ssid = "FrontierHSI";
 const char* password = "";
 const char* mqtt_server = "192.168.254.221";
 
-#define PUB_TOPIC_H             "258Thomas/shop/dryer/sensor/humidity"
-#define PUB_TOPIC_T             "258Thomas/shop/dryer/sensor/temperature"
+#define PUB_TOPIC_H             "258Thomas/shop/office/sensor/humidity"
+#define PUB_TOPIC_T             "258Thomas/shop/office/sensor/temperature"
 
 #define MQTT_MESSAGE_SIZE  100
 #define LOOP_DELAY  60000                     // time between readings

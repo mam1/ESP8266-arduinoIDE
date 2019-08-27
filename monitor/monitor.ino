@@ -20,8 +20,8 @@
 
 #define SCREEN_WIDTH 128                      // OLED display width, in pixels
 #define SCREEN_HEIGHT 64                      // OLED display height, in pixels
-#define SUB_TOPIC             "258Thomas/shop/sensor/dryer/offset"
-#define PUB_TOPIC             "258Thomas/shop/controller/dryer/dehumidifier"
+#define SUB_TOPIC             "258Thomas/shop/dryer/sensor/commands"
+#define PUB_TOPIC             "258Thomas/shop/dryer/sensor"
 #define MQTT_MESSAGE_SIZE   100               // max size of mqtt message
 #define LOOP_DELAY          60000             // time between readings
 #define HUMIDITY_HIGH_LIMIT 25                // turn dehumidifier on
@@ -137,6 +137,8 @@ void reconnect() {
       client.subscribe(SUB_TOPIC);
       Serial.print("listening for messages on topic ");
       Serial.println(SUB_TOPIC);
+      Serial.print("Publishing readings to ");
+      Serial.println(PUB_TOPIC);
     }
     else {
       Serial.print("failed, rc=");

@@ -44,7 +44,7 @@
 
 #define SUB_TOPIC_1   "258Thomas/shop/dryer/sensor/humidity"
 #define SUB_TOPIC_2   "258Thomas/shop/dryer/controller/commands"
-#define PUB_TOPIC     "258tTomas/shop/dryer/controller"
+#define PUB_TOPIC     "258Thomas/shop/dryer/controller"
 
 #define MQTT_MESSAGE_SIZE   100               // max size of mqtt message
 
@@ -61,6 +61,17 @@
 const char* ssid = "FrontierHSI";
 const char* password = "";
 const char* mqtt_server = "192.168.254.221";
+const char* keyword[CMD_TYPES] = {
+  /*  0 */    "temperature",
+  /*  1 */    "humidity",
+  /*  2 */    "on",
+  /*  3 */    "off",
+  /*  4 */    "low",
+  /*  5 */    "high",
+  /*  6 */    "status",
+  /*  7 */    "????",
+  /*  8 */    "auto"
+};
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
@@ -78,17 +89,17 @@ static const uint8_t D9   = 3;
 static const uint8_t D10  = 1;
 
 char  command[MAX_COMMAND_SIZE + 1], *cmd_ptr;
-String    keyword[CMD_TYPES] = {
-  /*  0 */    "temperature",
-  /*  1 */    "humidity",
-  /*  2 */    "on",
-  /*  3 */    "off",
-  /*  4 */    "low",
-  /*  5 */    "high",
-  /*  6 */    "status",
-  /*  7 */    "????",
-  /*  8 */    "auto"
-};
+// String    keyword[CMD_TYPES] = {
+//   /*  0 */    "temperature",
+//   /*  1 */    "humidity",
+//   /*  2 */    "on",
+//   /*  3 */    "off",
+//   /*  4 */    "low",
+//   /*  5 */    "high",
+//   /*  6 */    "status",
+//   /*  7 */    "????",
+//   /*  8 */    "auto"
+// };
 
 WiFiUDP ntpUDP;
 WiFiClient espClient;
@@ -188,9 +199,9 @@ int get_command_type(char *sptr) {
   int         i;
 
   for (i = 0; i < CMD_TYPES; i++) {
-    index = strstr(sptr, keyword[i].c_str());
+    index = strstr(sptr, keyword[i]);
     if (index != NULL) {
-      // Serial.printf("command char <%c>\n", *index);
+      Serial.printf("command<%s>, index %i\n", keyword[i], i);
       return i;
     }
   }
@@ -209,7 +220,7 @@ float get_command_value(char *sptr, char* testc) {
   // Serial.printf("first char in key word <%c>\n", *ptr);
 
 // return 22.22;
-  ptr +=  strlen(keyword[1].c_str());
+  ptr +=  strlen(keyword[1]);
   // Serial.printf("first char after key word <%c>\n", *ptr);
   // return 11.11;
 
@@ -230,13 +241,15 @@ void reconnect() {
     // Attempt to connect
     if (client.connect(clientId.c_str())) {
       Serial.println("connected");
-     
+
       client.subscribe(SUB_TOPIC_1);
       Serial.print("listening for messages on topic ");
       Serial.println(SUB_TOPIC_1);
       client.subscribe(SUB_TOPIC_2);
       Serial.print("listening for messages on topic ");
       Serial.println(SUB_TOPIC_2);
+      Serial.print("publishing to ");
+      Serial.println(PUB_TOPIC);
     }
     else {
       Serial.print("failed, rc=");
@@ -302,13 +315,12 @@ void pub_ready() {
   return;
 }
 
-void process_command(byte* payload, unsigned int length){
+void process_command(byte* payload, unsigned int length) {
   char*       ptr;
   int         command_type;
 
   ptr = (char*)payload;
   Serial.println("processing a command");
-  command_type = get_command_type((char *)payload);
   command_type = get_command_type(ptr);
   if (command_type == -1) {
     Serial.println("Unknown command type");
@@ -402,10 +414,7 @@ void process_humidity_reading(byte* payload, unsigned int length) {
   // Serial.printf("command type %i\n", command_type);
   if (command_type == 1) {
     humid = get_command_value(ptr, "humidity");
-    Serial.printf("humid = %2.2f\n", humid);
     if (persist.mode == 2) {
-      Serial.printf("humidity %2.1f\n", humid);
-
       // set persist.state based on humidity value
       if (humid > persist.high) {
         persist.state = 1;
@@ -456,10 +465,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
   Serial.println();
   // Serial.printf("topic -> %s\n", topic);
-  if(strcmp(topic, SUB_TOPIC_1) != NULL){
+  if (strcmp(topic, SUB_TOPIC_1) != NULL) {
     process_command(payload, length);
   }
-  else if(strcmp(topic, SUB_TOPIC_2) != NULL){
+  else if (strcmp(topic, SUB_TOPIC_2) != NULL) {
     process_humidity_reading(payload, length);
   }
   return;
@@ -480,7 +489,6 @@ void setup() {
     save_controller_state(&persist);    // save control block
   }
   get_contoller_state(&persist);
-  persist.mode = AUTO;
 
   pinMode(D0, OUTPUT);                  // use D0 to control builtin LED
   pinMode(D3, OUTPUT);                  // use D3  to control power relay
