@@ -197,7 +197,7 @@ float t_to_f(char *ptr) {
 int get_command_type(char *sptr) {
   char        *index;
   int         i;
-
+Serial.printf("payload passed to get_command_type <%s>\n", sptr);
   for (i = 0; i < CMD_TYPES; i++) {
     index = strstr(sptr, keyword[i]);
     if (index != NULL) {
@@ -293,6 +293,20 @@ void pub_ready() {
 
   controller_ready_message  = c_time_string;  // load time stamp
   if (persist.state) {
+    switch(persist.mode){
+      case 1:
+        controller_ready_message += 
+        break;
+      case 1:
+        controller_ready_message += 
+        break;
+      case 1:
+        controller_ready_message += 
+        break;
+
+      default:
+        controller_ready_message += "error - bad mode code "
+    }
     controller_ready_message += ", dehumidifier on, ";
     display.println("dehumidifier on");
   }
@@ -456,13 +470,15 @@ void process_humidity_reading(byte* payload, unsigned int length) {
 
 /* called when a message is received */
 void callback(char* topic, byte* payload, unsigned int length) {
+  int       i;
 
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
-  for (int i = 0; i < length; i++) {
+  for (i = 0; i < length; i++) {
     Serial.print((char)payload[i]);
   }
+  payload[i] = '\0';
   Serial.println();
   // Serial.printf("topic -> %s\n", topic);
   if (strcmp(topic, SUB_TOPIC_1) != NULL) {
