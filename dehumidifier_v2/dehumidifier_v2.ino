@@ -133,7 +133,6 @@ void setup_wifi() {
   timeClient.begin();                   // initialize time client
   client.setServer(mqtt_server, 1883);  // initialize MQTT broker
   client.setCallback(callback);         // set function that executes when a message is received
-  Serial.println();
 
 // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
@@ -143,7 +142,7 @@ void setup_wifi() {
   display.display();                  // display buffer Adafruit logo
   delay(2000);                        // Pause for 2 seconds
   display.clearDisplay();             // Clear the buffer
-  display.setTextSize(1);             // Normal 1:1 pixel scale
+  display.setTextSize(2);             // Normal 1:1 pixel scale
   display.setTextColor(WHITE);        // Draw white text
   display.setCursor(0, 0);            // Start at top-left corner
 }
@@ -189,7 +188,7 @@ int get_command_type(char *sptr) {
  
   for (i = 0; i < CMD_TYPES; i++) {
     index = strstr(sptr, keyword[i]);
-    if (index != NULL) {
+    if (index != 0) {
       return i;
     }
   }
@@ -383,7 +382,7 @@ void process_humidity_reading(byte* payload, unsigned int length) {
   float       humid;
 
   ptr = (char*)payload;
-  Serial.println("processing a humidity reading");
+
   command_type = get_command_type(ptr);
   if (command_type == -1) {
     Serial.println("Unknown command type");
@@ -392,12 +391,14 @@ void process_humidity_reading(byte* payload, unsigned int length) {
 
   if (command_type == 1) {
     humid = get_command_value(ptr, "humidity");
+    Serial.printf("processing a humidity reading of %2.2f, %2.2f - %2.2f, mode = %i\n", 
+      humid, persist.high, persist.low, persist.mode);
     if (persist.mode == 2) {
       // set persist.state based on humidity value
       if (humid > persist.high) {
         persist.state = 1;
-        digitalWrite(D3, HIGH);    // Turn the dehumidifier on
-        digitalWrite(D0, LOW);     // turn off the led
+        digitalWrite(D3, HIGH);    // turn the dehumidifier on
+        digitalWrite(D0, LOW);     // turn on the led
         persist.state = ON;
         save_controller_state(&persist);
         Serial.println("turn on");
@@ -407,17 +408,10 @@ void process_humidity_reading(byte* payload, unsigned int length) {
 
       if (humid < persist.low) {
         persist.state = 0;
-        digitalWrite(D3, LOW);  // Turn the dehumidifier off
+        digitalWrite(D3, LOW);    // Turn the dehumidifier off
+        digitalWrite(D0, HIGH);   // turn off the led
         persist.state = OFF;
         save_controller_state(&persist);
-        Serial.println("turn off");
-        pub_ready();
-        return;
-      }
-
-      if (humid > persist.low) {
-        persist.state = 0;
-        digitalWrite(D3, LOW);  // Turn the dehumidifier off
         Serial.println("turn off");
         pub_ready();
         return;
@@ -440,10 +434,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
   payload[i] = '\0';
   Serial.println();
-  if (strcmp(topic, SUB_TOPIC_1) != NULL) {
+  if (strcmp(topic, SUB_TOPIC_1) != 0) {
     process_command(payload, length);
   }
-  else if (strcmp(topic, SUB_TOPIC_2) != NULL) {
+  else if (strcmp(topic, SUB_TOPIC_2) != 0) {
     process_humidity_reading(payload, length);
   }
   return;
