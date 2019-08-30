@@ -61,6 +61,7 @@
 const char* ssid = "FrontierHSI";
 const char* password = "";
 const char* mqtt_server = "192.168.254.221";
+
 const char* keyword[CMD_TYPES] = {
   /*  0 */    "temperature",
   /*  1 */    "humidity",
@@ -72,6 +73,7 @@ const char* keyword[CMD_TYPES] = {
   /*  7 */    "????",
   /*  8 */    "auto"
 };
+char  command[MAX_COMMAND_SIZE + 1], *cmd_ptr;
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
@@ -87,19 +89,6 @@ static const uint8_t D7   = 13;
 static const uint8_t D8   = 15;
 static const uint8_t D9   = 3;
 static const uint8_t D10  = 1;
-
-char  command[MAX_COMMAND_SIZE + 1], *cmd_ptr;
-// String    keyword[CMD_TYPES] = {
-//   /*  0 */    "temperature",
-//   /*  1 */    "humidity",
-//   /*  2 */    "on",
-//   /*  3 */    "off",
-//   /*  4 */    "low",
-//   /*  5 */    "high",
-//   /*  6 */    "status",
-//   /*  7 */    "????",
-//   /*  8 */    "auto"
-// };
 
 WiFiUDP ntpUDP;
 WiFiClient espClient;
@@ -197,11 +186,10 @@ float t_to_f(char *ptr) {
 int get_command_type(char *sptr) {
   char        *index;
   int         i;
-  // Serial.printf("payload passed to get_command_type <%s>\n", sptr);
+ 
   for (i = 0; i < CMD_TYPES; i++) {
     index = strstr(sptr, keyword[i]);
     if (index != NULL) {
-      // Serial.printf("command<%s>, index %i\n", keyword[i], i);
       return i;
     }
   }
@@ -214,21 +202,10 @@ float get_command_value(char* sptr, char* testc) {
   char        *ptr;
 
   ptr = strstr(sptr, testc);
-
-  // return 33.33;
-
-  // Serial.printf("first char in key word <%c>\n", *ptr);
-
-// return 22.22;
   ptr +=  strlen(testc);
-  // Serial.printf("first char after key word <%c>\n", *ptr);
-  // return 11.11;
-
   while ((*ptr == ' ') || (*ptr == ':')) ptr++;
-  Serial.printf("first byte fed to t_to_f <%c>\n", *ptr);
-  Serial.printf("second byte fed to t_to_f <%c>\n", *(ptr + 1));
   return t_to_f(ptr);
-};
+}
 
 /* connect ti a MQTT broker */
 void reconnect() {
@@ -270,7 +247,6 @@ void pub_ready() {
   String                con_topic;
   float                 humidity;
 
-  // Serial.println("pub_ready called");
   // get the time
   epoch =  timeClient.getEpochTime();
   unix_time = static_cast<time_t>(epoch);
@@ -334,8 +310,8 @@ void process_command(byte* payload, unsigned int length) {
   int         command_type;
 
   ptr = (char*)payload;
-  Serial.println("processing a command");
   command_type = get_command_type(ptr);
+  Serial.printf("processing a %s command\n", keyword[command_type]);
   if (command_type == -1) {
     Serial.println("Unknown command type");
     return;
@@ -353,8 +329,6 @@ void process_command(byte* payload, unsigned int length) {
     digitalWrite(D3, HIGH);  // Turn the dehumidifier on
     digitalWrite(D0, LOW);   // Turn the LED on
     save_controller_state(&persist);
-    // Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized,
-                  // persist.mode, persist.state, persist.high, persist.low);
     pub_ready();
     break;
   case 3: // off
@@ -364,13 +338,10 @@ void process_command(byte* payload, unsigned int length) {
     digitalWrite(D3, LOW);    // Turn the dehumidifier off
     digitalWrite(D0, HIGH);   // Turn the LED off
     save_controller_state(&persist);
-    // Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized,
-                  // persist.mode, persist.state, persist.high, persist.low);
     pub_ready();
     break;
   case 4: // low
     Serial.println("set low humidity limit");
-    // Serial.printf("get humidity value > %2.2f\n", get_command_value((char *)payload));
     char    *tptr;
     tptr = (char*)payload;
     Serial.print("payload <");
@@ -379,22 +350,17 @@ void process_command(byte* payload, unsigned int length) {
     Serial.printf("command value %2.2f\n", get_command_value((char *)payload, "low"));
     persist.low = get_command_value((char *)payload, "low");
     save_controller_state(&persist);
-    // Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized,
-                  // persist.mode, persist.state, persist.high, persist.low);
     pub_ready();
     break;
   case 5: // high
     Serial.println("set high humidity limit");
     persist.high = get_command_value((char *)payload, "high");
     save_controller_state(&persist);
-    // Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized,
-    //               persist.mode, persist.state, persist.high, persist.low);
     pub_ready();
     break;
   case 6:  // status
     Serial.print("system status - ");
-    // Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized,
-    //               persist.mode, persist.state, persist.high, persist.low);
+    pub_ready();
     break;
   case 7:  // t_ high
     break;
@@ -402,8 +368,6 @@ void process_command(byte* payload, unsigned int length) {
     Serial.println("mode is auto");
     persist.mode = AUTO;
     save_controller_state(&persist);
-    // Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized,
-    //               persist.mode, persist.state, persist.high, persist.low);
     pub_ready();
     break;
   default:
@@ -412,7 +376,6 @@ void process_command(byte* payload, unsigned int length) {
   }
   return;
 }
-
 
 void process_humidity_reading(byte* payload, unsigned int length) {
   char*       ptr;
@@ -426,7 +389,7 @@ void process_humidity_reading(byte* payload, unsigned int length) {
     Serial.println("Unknown command type");
     return;
   }
-  // Serial.printf("command type %i\n", command_type);
+
   if (command_type == 1) {
     humid = get_command_value(ptr, "humidity");
     if (persist.mode == 2) {
@@ -438,8 +401,6 @@ void process_humidity_reading(byte* payload, unsigned int length) {
         persist.state = ON;
         save_controller_state(&persist);
         Serial.println("turn on");
-        // Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized,
-        //               persist.mode, persist.state, persist.high, persist.low);
         pub_ready();
         return;
       }
@@ -450,8 +411,6 @@ void process_humidity_reading(byte* payload, unsigned int length) {
         persist.state = OFF;
         save_controller_state(&persist);
         Serial.println("turn off");
-        // Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized,
-        //               persist.mode, persist.state, persist.high, persist.low);
         pub_ready();
         return;
       }
@@ -481,7 +440,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
   payload[i] = '\0';
   Serial.println();
-  // Serial.printf("topic -> %s\n", topic);
   if (strcmp(topic, SUB_TOPIC_1) != NULL) {
     process_command(payload, length);
   }
@@ -516,13 +474,6 @@ void setup() {
   timeClient.begin();                   // initialize time client
   client.setServer(mqtt_server, 1883);  // initialize MQTT broker
   client.setCallback(callback);         // set function that executes when a message is received
-  // Serial.println();
-
-  // Serial.println(" ");
-  // Serial.println(" ");
-  // Serial.println("starting");
-  // Serial.printf("initialized %i, mode %i, state %i, range %2.2f-%2.2f\n", persist.initialized,
-  //               persist.mode, persist.state, persist.high, persist.low);
 
 // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
