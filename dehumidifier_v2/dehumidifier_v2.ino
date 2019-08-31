@@ -147,8 +147,8 @@ void setup_wifi() {
   display.setCursor(0, 0);            // Start at top-left corner
 }
 
+/* Save structure to flash */
 void save_controller_state(CONTROLBLOCK * ptr) {
-
   const byte* p = (const byte*)(const void*)ptr;
   int i;
   int ee = 0;
@@ -158,13 +158,45 @@ void save_controller_state(CONTROLBLOCK * ptr) {
   return;
 }
 
+/* Load structure from flash */
 void get_contoller_state(CONTROLBLOCK * ptr) {
-
   byte* p = (byte*)(void*)ptr;
   int i;
   int ee = 0;
   for (i = 0; i < control_block_size; i++)
     *p++ = EEPROM.read(ee++);
+  return;
+}
+
+/* turn off relay */
+void r_off() {
+  digitalWrite(D3, LOW);    // Turn the dehumidifier off
+  digitalWrite(D0, HIGH);   // turn off the led
+  persist.state = OFF;
+  save_controller_state(&persist);
+  Serial.println("turn off");
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(WHITE);        // Draw white text
+  display.setCursor(0, 15);
+  display.println("off");
+  display.display();                  // display buffer
+  return;
+}
+
+/* turn on relay */
+void r_on() {
+  digitalWrite(D3, HIGH);    // turn the dehumidifier on
+  digitalWrite(D0, LOW);     // turn on the led
+  persist.state = ON;
+  save_controller_state(&persist);
+  Serial.println("turn on");
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(WHITE);        // Draw white text
+  display.setCursor(0, 15);
+  display.println("on");
+  display.display();                  // display buffer
   return;
 }
 
@@ -185,7 +217,7 @@ float t_to_f(char *ptr) {
 int get_command_type(char *sptr) {
   char        *index;
   int         i;
- 
+
   for (i = 0; i < CMD_TYPES; i++) {
     index = strstr(sptr, keyword[i]);
     if (index != 0) {
@@ -284,11 +316,11 @@ void pub_ready() {
   }
   if (persist.state) {
     controller_ready_message += "dehumidifier on, ";
-    display.println("dehumidifier on");
+    // display.println("dehumidifier on");
   }
   else {
     controller_ready_message += "dehumidifier off, ";
-    display.println("dehumidifier off");
+    // display.println("dehumidifier off");
   }
 
   controller_ready_message += persist.high;
@@ -324,19 +356,13 @@ void process_command(byte* payload, unsigned int length) {
   case 2: // on
     Serial.println("mode is manual force on");
     persist.mode = MANUAL;
-    persist.state = ON;
-    digitalWrite(D3, HIGH);  // Turn the dehumidifier on
-    digitalWrite(D0, LOW);   // Turn the LED on
-    save_controller_state(&persist);
+    r_on();
     pub_ready();
     break;
   case 3: // off
     Serial.println("mode is manual force off");
     persist.mode = MANUAL;
-    persist.state = OFF;
-    digitalWrite(D3, LOW);    // Turn the dehumidifier off
-    digitalWrite(D0, HIGH);   // Turn the LED off
-    save_controller_state(&persist);
+    r_off();
     pub_ready();
     break;
   case 4: // low
@@ -391,28 +417,18 @@ void process_humidity_reading(byte* payload, unsigned int length) {
 
   if (command_type == 1) {
     humid = get_command_value(ptr, "humidity");
-    Serial.printf("processing a humidity reading of %2.2f, %2.2f - %2.2f, mode = %i\n", 
-      humid, persist.high, persist.low, persist.mode);
+    Serial.printf("processing a humidity reading of %2.2f, %2.2f - %2.2f, mode = %i\n",
+                  humid, persist.high, persist.low, persist.mode);
     if (persist.mode == 2) {
       // set persist.state based on humidity value
       if (humid > persist.high) {
-        persist.state = 1;
-        digitalWrite(D3, HIGH);    // turn the dehumidifier on
-        digitalWrite(D0, LOW);     // turn on the led
-        persist.state = ON;
-        save_controller_state(&persist);
-        Serial.println("turn on");
+        r_on();
         pub_ready();
         return;
       }
 
       if (humid < persist.low) {
-        persist.state = 0;
-        digitalWrite(D3, LOW);    // Turn the dehumidifier off
-        digitalWrite(D0, HIGH);   // turn off the led
-        persist.state = OFF;
-        save_controller_state(&persist);
-        Serial.println("turn off");
+        r_off();
         pub_ready();
         return;
       }
