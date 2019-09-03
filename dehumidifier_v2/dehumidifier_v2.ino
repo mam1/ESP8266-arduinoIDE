@@ -207,7 +207,7 @@ float t_to_f(char *ptr) {
   char            char1[8];
   float       converted;
 
-  for (int i = 0; i < 6; i++)
+  for (i = 0; i < 6; i++)
     convert += *ptr++;
   convert.toCharArray(char1, convert.length() + 1);
   converted = atof(char1);

@@ -1,6 +1,6 @@
 /*
   
-  read Adafruit HTU21D-F sensor and report temperature and humidity
+  read Adafruit sensor and report temperature and humidity
 
 */
 
@@ -9,14 +9,14 @@
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
 #include <PubSubClient.h>
-#include <DHT.h>
+// #include <DHT.h>
 #include <NTPClient.h>
 #include <time.h>
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <Adafruit_HTU21DF.h>
+#include "DHTesp.h"
 
 #define SCREEN_WIDTH 128                      // OLED display width, in pixels
 #define SCREEN_HEIGHT 64                      // OLED display height, in pixels
@@ -37,7 +37,6 @@ const char* mqtt_server = "192.168.254.221";
 
 #define OLED_RESET     -1         // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-Adafruit_HTU21DF htu;
 
 // ESP8266 GPIO pins 
 static const uint8_t D0   = 16;   // blue led
@@ -56,6 +55,7 @@ WiFiUDP ntpUDP;
 WiFiClient espClient;
 PubSubClient client(espClient);
 NTPClient timeClient(ntpUDP, NTP_ADDRESS, NTP_OFFSET, NTP_INTERVAL);
+DHTesp dht;
 
 long        lastMsg = 0;
 char        msg[MQTT_MESSAGE_SIZE];
@@ -167,6 +167,7 @@ void setup() {
   // dht.begin();                          // initialize the DHT22 sensor
   client.setServer(mqtt_server, 1883);  // initialize MQTT broker
   client.setCallback(callback);         // set function that executes when a message is received
+  dht.setup(13, DHTesp::DHT22);         // Connect DHT sensor to GPIO 17
   Serial.println();
 
  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
