@@ -1,6 +1,6 @@
 /*
   
-  read Adafruit sensor and report temperature and humidity
+  read DHT22 sensor and report temperature and humidity
 
 */
 
@@ -17,15 +17,16 @@
 #include <Adafruit_SSD1306.h>
 #include "DHTesp.h"
 
-#define SCREEN_WIDTH 128                      // OLED display width, in pixels
-#define SCREEN_HEIGHT 64                      // OLED display height, in pixels
-#define SUB_TOPIC             "258Thomas/shop/office/sensor/commands"
-#define PUB_TOPIC             "258Thomas/shop/office/sensor"
-#define MQTT_MESSAGE_SIZE   100               // max size of mqtt message
-#define LOOP_DELAY          60000             // time between readings
-#define HUMIDITY_HIGH_LIMIT 25                // turn dehumidifier on
-#define HUMIDITY_LOW_LIMIT  20                // tune dehumidifier off
-#define EST_OFFSET   -4                       // convert GMT to EST
+#define SCREEN_WIDTH          128   // OLED display width, in pixels
+#define SCREEN_HEIGHT         64    // OLED display height, in pixels
+#define SUB_TOPIC             "258Thomas/house/office/sensor/commands"
+#define PUB_TOPIC_H           "258Thomas/house/office/sensor/humidity"
+#define PUB_TOPIC_T           "258Thomas/house/office/sensor/temperature"
+#define MQTT_MESSAGE_SIZE     100    // max size of mqtt message
+#define LOOP_DELAY            60000  // time between readings
+#define HUMIDITY_HIGH_LIMIT   25     // turn dehumidifier on
+#define HUMIDITY_LOW_LIMIT    20     // tune dehumidifier off
+#define EST_OFFSET            -4     // convert GMT to EST
 #define NTP_OFFSET   60 * 60 * EST_OFFSET     // In seconds
 #define NTP_INTERVAL 60 * 1000                // In milliseconds
 #define NTP_ADDRESS  "us.pool.ntp.org"        // time server
@@ -33,9 +34,6 @@
 const char* ssid = "FrontierHSI";
 const char* password = "";
 const char* mqtt_server = "192.168.254.221";
-
-#define PUB_TOPIC_H             "258Thomas/shop/office/sensor/humidity"
-#define PUB_TOPIC_T             "258Thomas/shop/office/sensor/temperature"
 
 #define OLED_RESET     -1         // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
@@ -93,12 +91,12 @@ void callback(char* topic, byte* payload, unsigned int length) {
   char hstring[] = "offset";
   String          convert;
   char char1[8];
-  float humid;
+  float offset;
 
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
-  for (int i = 0; i < length; i++) {
+  for (int i = 0; i < (int)length; i++) {
     Serial.print((char)payload[i]);
   }
   Serial.println();
@@ -107,20 +105,14 @@ void callback(char* topic, byte* payload, unsigned int length) {
   char *ptr = strstr((char*)payload, hstring);
   if (ptr != NULL) /* Substring found */
   {
-    // convert humidity text value from the mqtt message to float
+    // convert  text value from the mqtt message to float
     convert = "";
     ptr += strlen(hstring) + 2;
     for (int i = 0; i < 6; i++)
       convert += *ptr++;
     convert.toCharArray(char1, convert.length() + 1);
-    humid = atof(char1);
-    Serial.println(humid);
-
-    // set dehumidifer_state based on received humidity value
-    if (humid > HUMIDITY_HIGH_LIMIT)
-      if (!dehumidifer_state)  dehumidifer_state = 1;
-      else if (humid < HUMIDITY_LOW_LIMIT)
-        if (dehumidifer_state) dehumidifer_state = 0;
+    offset = atof(char1);
+    Serial.println(offset);
   }
   return;
 }
@@ -139,8 +131,7 @@ void reconnect() {
       client.subscribe(SUB_TOPIC);
       Serial.print("listening for messages on topic ");
       Serial.println(SUB_TOPIC);
-      Serial.print("Publishing readings to ");
-      Serial.println(PUB_TOPIC);
+      Serial.printf("Publishing readings to: %s, %s\n",PUB_TOPIC_H, PUB_TOPIC_T);
     }
     else {
       Serial.print("failed, rc=");
@@ -241,7 +232,7 @@ void loop() {
     client.publish(PUB_TOPIC_T, msg);
     snprintf (msg, MQTT_MESSAGE_SIZE, "%s humidity: %2.2f", c_time_string,humidity);
     client.publish(PUB_TOPIC_H, msg);
-    Serial.printf("published sensor readings\n");
+    Serial.printf("    published sensor readings to %s and %s\n", PUB_TOPIC_T, PUB_TOPIC_H);
 
   }
 }
