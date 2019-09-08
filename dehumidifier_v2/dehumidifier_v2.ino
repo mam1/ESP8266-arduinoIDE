@@ -46,7 +46,7 @@
 #define SUB_TOPIC_2   "258Thomas/shop/dryer/controller/commands"
 #define PUB_TOPIC     "258Thomas/shop/dryer/controller"
 
-#define MQTT_MESSAGE_SIZE   100               // max size of mqtt message
+#define MQTT_MESSAGE_SIZE   200               // max size of mqtt message
 
 #define LOOP_DELAY          60000             // time between readings
 #define HUMIDITY_HIGH_LIMIT 64                // turn dehumidifier on
@@ -170,33 +170,37 @@ void get_contoller_state(CONTROLBLOCK * ptr) {
 
 /* turn off relay */
 void r_off() {
-  digitalWrite(D3, LOW);    // Turn the dehumidifier off
-  digitalWrite(D0, HIGH);   // turn off the led
-  persist.state = OFF;
-  save_controller_state(&persist);
-  Serial.println("turn off");
-  display.clearDisplay();
-  display.setTextSize(2);
-  display.setTextColor(WHITE);        // Draw white text
-  display.setCursor(0, 15);
-  display.println("off");
-  display.display();                  // display buffer
+  if (persist.state != OFF) {
+    digitalWrite(D3, LOW);    // Turn the dehumidifier off
+    digitalWrite(D0, HIGH);   // turn off the led
+    persist.state = OFF;
+    save_controller_state(&persist);
+    Serial.println("dehumidifier turned off");
+    display.clearDisplay();
+    display.setTextSize(2);
+    display.setTextColor(WHITE);        // Draw white text
+    display.setCursor(0, 15);
+    display.println("off");
+    display.display();                  // display buffer
+  }
   return;
 }
 
 /* turn on relay */
 void r_on() {
-  digitalWrite(D3, HIGH);    // turn the dehumidifier on
-  digitalWrite(D0, LOW);     // turn on the led
-  persist.state = ON;
-  save_controller_state(&persist);
-  Serial.println("turn on");
-  display.clearDisplay();
-  display.setTextSize(2);
-  display.setTextColor(WHITE);        // Draw white text
-  display.setCursor(0, 15);
-  display.println("on");
-  display.display();                  // display buffer
+  if (persist.state != ON) {
+    digitalWrite(D3, HIGH);    // turn the dehumidifier on
+    digitalWrite(D0, LOW);     // turn on the led
+    persist.state = ON;
+    save_controller_state(&persist);
+    Serial.println("dehumidifier turned on");
+    display.clearDisplay();
+    display.setTextSize(2);
+    display.setTextColor(WHITE);        // Draw white text
+    display.setCursor(0, 15);
+    display.println("on");
+    display.display();
+  }
   return;
 }
 
@@ -228,8 +232,8 @@ int get_command_type(char *sptr) {
 }
 
 float get_command_value(char* sptr, char* testc) {
-  float       value;
-  int         index;
+  // float       value;
+  // int         index;
   char        *ptr;
 
   ptr = strstr(sptr, testc);
@@ -274,9 +278,10 @@ void pub_ready() {
   unsigned long         epoch;
   char*                 c_time_string;
   time_t                unix_time;
-  String                controller_ready_message;
-  String                con_topic;
-  float                 humidity;
+  char                  msg[MQTT_MESSAGE_SIZE], msg2[MQTT_MESSAGE_SIZE];
+  // String                con_topic;
+  // float                 humidity;
+Serial.println("pub_ready called");
 
   // get the time
   epoch =  timeClient.getEpochTime();
@@ -298,41 +303,53 @@ void pub_ready() {
   // display.printf("\n%2.1f - %2.1f\n", persist.high, persist.low);
   // display.display();    // update oled display
 
-  controller_ready_message = c_time_string;  // load time stamp
+  // controller_ready_message = c_time_string;  // load time stamp
+  strcpy(msg2,c_time_string);
 
   switch (persist.mode) {
   case 0:
-    controller_ready_message += ", manual control, ";
+    strcat(msg2, ", manual control, ");
     break;
   case 1:
-    controller_ready_message += ", manual control, ";
+    strcat(msg2, ", manual control, ");
     break;
   case 2:
-    controller_ready_message += ", automatic control, ";
+    strcat(msg2, ", automatic control, ");
     break;
   default:
-    controller_ready_message += "*** error - bad mode code ***, ";
+    strcat(msg2, "*** error - bad mode code ***, ");
     break;
   }
   if (persist.state) {
-    controller_ready_message += "dehumidifier on, ";
+    strcat(msg2, "dehumidifier on, ");
     // display.println("dehumidifier on");
   }
   else {
-    controller_ready_message += "dehumidifier off, ";
+    strcat(msg2, "dehumidifier off, ");
     // display.println("dehumidifier off");
   }
 
-  controller_ready_message += persist.high;
-  controller_ready_message += "-";
-  controller_ready_message += persist.low;
-  controller_ready_message += ", controller ready";
+    snprintf (msg, MQTT_MESSAGE_SIZE, "%s %2.2f - %2.2f, controller ready", msg2, persist.high, persist.low);
 
-  Serial.println(controller_ready_message);
+
+  // msg += persist.high;
+  // msg += "-";
+  // msg += persist.low;
+  // msg += ", controller ready";
+
+  // Serial.println(msg);
 
   // publish ready message
-  con_topic = String(PUB_TOPIC);
-  client.publish(con_topic.c_str(), controller_ready_message.c_str());
+  // con_topic = String(PUB_TOPIC);
+  // client.publish(con_topic.c_str(), msg.c_str());
+  Serial.println("publishing message");
+  Serial.printf("** %s **\n", msg);
+
+  // msg_ptr = msg.c_str();
+  // client.publish(PUB_TOPIC, msg);
+    client.publish(PUB_TOPIC, msg);
+
+
   return;
 }
 
@@ -418,23 +435,15 @@ void process_humidity_reading(byte* payload, unsigned int length) {
   if (command_type == 1) {
     humid = get_command_value(ptr, "humidity");
     Serial.printf("processing a humidity reading of %2.2f, %2.2f - %2.2f, mode = %i\n",
-                  humid, persist.high, persist.low, persist.mode);
+      humid, persist.high, persist.low, persist.mode);
     if (persist.mode == 2) {
       // set persist.state based on humidity value
-      if (humid > persist.high) {
-        r_on();
-        pub_ready();
-        return;
-      }
-
-      if (humid < persist.low) {
-        r_off();
-        pub_ready();
-        return;
-      }
+      if (humid > persist.high) r_on();
+      else if (humid <= persist.low) r_off();
+      pub_ready();
+      return;
     }
   }
-
   return;
 }
 
@@ -445,7 +454,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
-  for (i = 0; i < length; i++) {
+  for (i = 0; i < (int)length; i++) {
     Serial.print((char)payload[i]);
   }
   payload[i] = '\0';
@@ -509,12 +518,10 @@ void loop() {
   }
 
   client.loop();
-
   long now = millis();
   if (now - lastMsg > LOOP_DELAY) {
     lastMsg = now;
     ++value;
-
     pub_ready();
   }
 }
