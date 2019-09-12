@@ -1,5 +1,5 @@
 /*
-  
+
   read DHT22 sensor and report temperature and humidity
 
 */
@@ -38,7 +38,7 @@ const char* mqtt_server = "192.168.254.221";
 #define OLED_RESET     -1         // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// ESP8266 GPIO pins 
+// ESP8266 GPIO pins
 static const uint8_t D0   = 16;   // blue led
 static const uint8_t D1   = 5;    // SCL
 static const uint8_t D2   = 4;    // SDA
@@ -131,7 +131,7 @@ void reconnect() {
       client.subscribe(SUB_TOPIC);
       Serial.print("listening for messages on topic ");
       Serial.println(SUB_TOPIC);
-      Serial.printf("Publishing readings to: %s, %s\n",PUB_TOPIC_H, PUB_TOPIC_T);
+      Serial.printf("Publishing readings to: %s, %s\n", PUB_TOPIC_H, PUB_TOPIC_T);
     }
     else {
       Serial.print("failed, rc=");
@@ -146,7 +146,7 @@ void reconnect() {
 void setup() {
 
   pinMode(D0, OUTPUT);                  // initialize the BUILTIN_LED pin as an output
-  pinMode(D3, OUTPUT);                  // use D3  to control power relay 
+  pinMode(D3, OUTPUT);                  // use D3  to control power relay
   Serial.begin(115200);                 // start the serial interface
   setup_wifi();                         // connect to wifi
   timeClient.begin();                   // initialize time client
@@ -155,10 +155,10 @@ void setup() {
   dht.setup(13, DHTesp::DHT22);         // Connect DHT sensor to GPIO 17
   Serial.println();
 
- // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
-  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
+// SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("SSD1306 allocation failed"));
-    for(;;); // Don't proceed, loop forever
+    for (;;); // Don't proceed, loop forever
   }
 
   display.display();  //display Adafruit logo
@@ -168,18 +168,19 @@ void setup() {
   display.clearDisplay();
   display.setTextSize(1);             // Normal 1:1 pixel scale
   display.setTextColor(WHITE);        // Draw white text
-  display.setCursor(0,0);             // Start at top-left corner
+  display.setCursor(0, 0);            // Start at top-left corner
 }
 
 void loop() {
 
   float       humidity;
   float       temperature;
-  String                controller_ready_message;
+  // String                controller_ready_message;
   String                con_topic;
   unsigned long         epoch;
   char*                 c_time_string;
   time_t                unix_time;
+  int                   bad_read;
 
   // update the time client
   timeClient.update();
@@ -192,10 +193,12 @@ void loop() {
   client.loop();
 
   long now = millis();
+
   if (now - lastMsg > LOOP_DELAY) {
     lastMsg = now;
     ++value;
 
+    bad_read = FALSE;
     // get the time
     epoch =  timeClient.getEpochTime();
     unix_time = static_cast<time_t>(epoch);
@@ -208,32 +211,44 @@ void loop() {
       if (*dst != '\n') dst++;
     }
     *dst = '\0';
-
+    while(bad_read == TRUE){
     humidity = dht.getHumidity();
+    if (isnan(humidity)) // Check if any reads failed
+      bad_read = TRUE;
+    else
+      bad_read = FALSE;
+  }
+    while(bad_read ==TRUE)
     temperature = dht.getTemperature();
-    temperature = dht.toFahrenheit(temperature);
-    Serial.printf("%s humidity %2.2f, temperature %2.2f\n", c_time_string, humidity, temperature);
+    if (isnan(temperature)) // Check if any reads failed
+      bad_read = TRUE;
+    else
+      bad_read = FALSE;
 
-    //update oled display
-    display.clearDisplay();
-    display.setTextSize(2);             
-    display.setTextColor(WHITE);        // Draw white text
-    display.setCursor(5,15);             
-    display.print(" T = ");
-    display.println(temperature);
-    display.setCursor(5,40); 
-    display.print(" H = ");
-    display.println(humidity);
-    display.display(); 
+    if (!bad_read) {
+      temperature = dht.toFahrenheit(temperature);
+      Serial.printf("%s humidity %2.2f, temperature %2.2f\n", c_time_string, humidity, temperature);
+
+      //update oled display
+      display.clearDisplay();
+      display.setTextSize(2);
+      display.setTextColor(WHITE);        // Draw white text
+      display.setCursor(5, 15);
+      display.print(" T = ");
+      display.println(temperature);
+      display.setCursor(5, 40);
+      display.print(" H = ");
+      display.println(humidity);
+      display.display();
 
 
-    // publish the readings
-    snprintf (msg, MQTT_MESSAGE_SIZE, "%s temperature: %2.2f", c_time_string,temperature);
-    client.publish(PUB_TOPIC_T, msg);
-    snprintf (msg, MQTT_MESSAGE_SIZE, "%s humidity: %2.2f", c_time_string,humidity);
-    client.publish(PUB_TOPIC_H, msg);
-    Serial.printf("    published sensor readings to %s and %s\n", PUB_TOPIC_T, PUB_TOPIC_H);
-
+      // publish the readings
+      snprintf (msg, MQTT_MESSAGE_SIZE, "%s temperature: %2.2f", c_time_string, temperature);
+      client.publish(PUB_TOPIC_T, msg);
+      snprintf (msg, MQTT_MESSAGE_SIZE, "%s humidity: %2.2f", c_time_string, humidity);
+      client.publish(PUB_TOPIC_H, msg);
+      Serial.printf("    published sensor readings to %s and %s\n", PUB_TOPIC_T, PUB_TOPIC_H);
+    }
   }
 }
 

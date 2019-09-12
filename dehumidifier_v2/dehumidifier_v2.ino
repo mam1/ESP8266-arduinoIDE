@@ -94,9 +94,11 @@ WiFiUDP ntpUDP;
 WiFiClient espClient;
 PubSubClient client(espClient);
 NTPClient timeClient(ntpUDP, NTP_ADDRESS, NTP_OFFSET, NTP_INTERVAL);
+char            msg[MQTT_MESSAGE_SIZE];
+// char            msg2[MQTT_MESSAGE_SIZE];
+// const char*     mptr;
 
 long        lastMsg = 0;
-char        msg[MQTT_MESSAGE_SIZE];
 int         value = 0;
 // char         *message;
 typedef struct {
@@ -133,18 +135,21 @@ void setup_wifi() {
   timeClient.begin();                   // initialize time client
   client.setServer(mqtt_server, 1883);  // initialize MQTT broker
   client.setCallback(callback);         // set function that executes when a message is received
+}
 
-// SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println(F("SSD1306 allocation failed"));
-    for (;;); // Don't proceed, loop forever
-  }
-  display.display();                  // display buffer Adafruit logo
-  delay(2000);                        // Pause for 2 seconds
-  display.clearDisplay();             // Clear the buffer
+/* update OLED display */
+
+void oled_update(void) {
+  display.clearDisplay();
   display.setTextSize(2);             // Normal 1:1 pixel scale
   display.setTextColor(WHITE);        // Draw white text
-  display.setCursor(0, 0);            // Start at top-left corner
+  display.setCursor(0, 15);
+  if (persist.state == OFF) display.println("off");
+  else if (persist.state == ON) display.println("on");
+  display.setCursor(0, 40);
+  if (persist.mode == 2) display.println("auto");
+  else display.println("manual");
+  display.display();
 }
 
 /* Save structure to flash */
@@ -159,7 +164,7 @@ void save_controller_state(CONTROLBLOCK * ptr) {
 }
 
 /* Load structure from flash */
-void get_contoller_state(CONTROLBLOCK * ptr) {
+void load_contoller_state(CONTROLBLOCK * ptr) {
   byte* p = (byte*)(void*)ptr;
   int i;
   int ee = 0;
@@ -169,37 +174,27 @@ void get_contoller_state(CONTROLBLOCK * ptr) {
 }
 
 /* turn off relay */
-void r_off() {
+void r_off(void) {
   if (persist.state != OFF) {
     digitalWrite(D3, LOW);    // Turn the dehumidifier off
     digitalWrite(D0, HIGH);   // turn off the led
     persist.state = OFF;
     save_controller_state(&persist);
     Serial.println("dehumidifier turned off");
-    display.clearDisplay();
-    display.setTextSize(2);
-    display.setTextColor(WHITE);        // Draw white text
-    display.setCursor(0, 15);
-    display.println("off");
-    display.display();                  // display buffer
+    oled_update();
   }
   return;
 }
 
 /* turn on relay */
-void r_on() {
+void r_on(void) {
   if (persist.state != ON) {
     digitalWrite(D3, HIGH);    // turn the dehumidifier on
     digitalWrite(D0, LOW);     // turn on the led
     persist.state = ON;
     save_controller_state(&persist);
     Serial.println("dehumidifier turned on");
-    display.clearDisplay();
-    display.setTextSize(2);
-    display.setTextColor(WHITE);        // Draw white text
-    display.setCursor(0, 15);
-    display.println("on");
-    display.display();
+    oled_update();
   }
   return;
 }
@@ -232,8 +227,6 @@ int get_command_type(char *sptr) {
 }
 
 float get_command_value(char* sptr, char* testc) {
-  // float       value;
-  // int         index;
   char        *ptr;
 
   ptr = strstr(sptr, testc);
@@ -270,7 +263,6 @@ void reconnect() {
       // Wait 10 seconds before retrying
       delay(10000);
     }
-
   }
 }
 
@@ -278,10 +270,9 @@ void pub_ready() {
   unsigned long         epoch;
   char*                 c_time_string;
   time_t                unix_time;
-  char                  msg[MQTT_MESSAGE_SIZE], msg2[MQTT_MESSAGE_SIZE];
-  // String                con_topic;
-  // float                 humidity;
-Serial.println("pub_ready called");
+  char                  floatString[10];
+
+  Serial.println("pub_ready called");
 
   // get the time
   epoch =  timeClient.getEpochTime();
@@ -295,60 +286,42 @@ Serial.println("pub_ready called");
     if (*dst != '\n') dst++;
   }
   *dst = '\0';
-
-  // display.clearDisplay();
-  // display.setCursor(0, 0);            // Start at top-left corner
-  // display.println(SUB_TOPIC);
-  // display.println(" ");
-  // display.printf("\n%2.1f - %2.1f\n", persist.high, persist.low);
-  // display.display();    // update oled display
-
-  // controller_ready_message = c_time_string;  // load time stamp
-  strcpy(msg2,c_time_string);
+  memset(&msg[0], '\0', sizeof(msg));
+  strcpy(msg, c_time_string);
 
   switch (persist.mode) {
   case 0:
-    strcat(msg2, ", manual control, ");
+    strcat(msg, ", manual control, ");
     break;
   case 1:
-    strcat(msg2, ", manual control, ");
+    strcat(msg, ", manual control, ");
     break;
   case 2:
-    strcat(msg2, ", automatic control, ");
+    strcat(msg, ", automatic control, ");
     break;
   default:
-    strcat(msg2, "*** error - bad mode code ***, ");
+    strcat(msg, "*** error - bad mode code ***, ");
     break;
   }
   if (persist.state) {
-    strcat(msg2, "dehumidifier on, ");
-    // display.println("dehumidifier on");
+    strcat(msg, "dehumidifier on, ");
   }
   else {
-    strcat(msg2, "dehumidifier off, ");
-    // display.println("dehumidifier off");
+    strcat(msg, "dehumidifier off, ");
   }
 
-    snprintf (msg, MQTT_MESSAGE_SIZE, "%s %2.2f - %2.2f, controller ready", msg2, persist.high, persist.low);
+  dtostrf(persist.high, 2, 2, floatString);
+  strcat(msg, floatString);
+  strcat(msg, " - ");
+  dtostrf(persist.low, 2, 2, floatString);
+  strcat(msg, floatString);
 
+  strcat(msg, ", controller ready");
 
-  // msg += persist.high;
-  // msg += "-";
-  // msg += persist.low;
-  // msg += ", controller ready";
-
-  // Serial.println(msg);
-
-  // publish ready message
-  // con_topic = String(PUB_TOPIC);
-  // client.publish(con_topic.c_str(), msg.c_str());
   Serial.println("publishing message");
   Serial.printf("** %s **\n", msg);
-
-  // msg_ptr = msg.c_str();
-  // client.publish(PUB_TOPIC, msg);
-    client.publish(PUB_TOPIC, msg);
-
+  client.publish(PUB_TOPIC, msg);
+  oled_update();
 
   return;
 }
@@ -373,12 +346,14 @@ void process_command(byte* payload, unsigned int length) {
   case 2: // on
     Serial.println("mode is manual force on");
     persist.mode = MANUAL;
+    save_controller_state(&persist);
     r_on();
     pub_ready();
     break;
   case 3: // off
     Serial.println("mode is manual force off");
     persist.mode = MANUAL;
+    save_controller_state(&persist);
     r_off();
     pub_ready();
     break;
@@ -410,6 +385,7 @@ void process_command(byte* payload, unsigned int length) {
     Serial.println("mode is auto");
     persist.mode = AUTO;
     save_controller_state(&persist);
+
     pub_ready();
     break;
   default:
@@ -425,7 +401,6 @@ void process_humidity_reading(byte* payload, unsigned int length) {
   float       humid;
 
   ptr = (char*)payload;
-
   command_type = get_command_type(ptr);
   if (command_type == -1) {
     Serial.println("Unknown command type");
@@ -435,7 +410,7 @@ void process_humidity_reading(byte* payload, unsigned int length) {
   if (command_type == 1) {
     humid = get_command_value(ptr, "humidity");
     Serial.printf("processing a humidity reading of %2.2f, %2.2f - %2.2f, mode = %i\n",
-      humid, persist.high, persist.low, persist.mode);
+                  humid, persist.high, persist.low, persist.mode);
     if (persist.mode == 2) {
       // set persist.state based on humidity value
       if (humid > persist.high) r_on();
@@ -473,7 +448,7 @@ void setup() {
   Serial.begin(115200);                 // start the serial interface
   control_block_size = sizeof(persist);
   EEPROM.begin(control_block_size);     // define some flash memory
-  get_contoller_state(&persist);        // load control block from flash
+  load_contoller_state(&persist);       // load control block from flash
   if (persist.initialized != TRUE) {    // initialize control block if necessary
     persist.initialized = TRUE;
     persist.mode = MANUAL;
@@ -482,12 +457,14 @@ void setup() {
     persist.low = HUMIDITY_LOW_LIMIT;
     save_controller_state(&persist);    // save control block
   }
-  get_contoller_state(&persist);
+  load_contoller_state(&persist);
 
   pinMode(D0, OUTPUT);                  // use D0 to control builtin LED
   pinMode(D3, OUTPUT);                  // use D3  to control power relay
-  digitalWrite(D0, HIGH);               //turn off the led
-  digitalWrite(D3, LOW);                //turn off the relay
+
+  if (persist.state == ON) r_on();
+  else if(persist.state == OFF) r_off();
+  else Serial.println("***** bad state code\n");
 
   setup_wifi();                         // connect to wifi
   timeClient.begin();                   // initialize time client
@@ -499,12 +476,7 @@ void setup() {
     Serial.println(F("SSD1306 allocation failed"));
     for (;;); // Don't proceed, loop forever
   }
-  display.display();                  // display buffer Adafruit logo
-  delay(2000);                        // Pause for 2 seconds
-  display.clearDisplay();             // Clear the buffer
-  display.setTextSize(1);             // Normal 1:1 pixel scale
-  display.setTextColor(WHITE);        // Draw white text
-  display.setCursor(0, 0);            // Start at top-left corner
+  oled_update();
 }
 
 void loop() {
