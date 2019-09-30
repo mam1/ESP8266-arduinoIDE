@@ -24,6 +24,7 @@
 #define PUB_TOPIC_T           "258Thomas/house/office/sensor/temperature"
 #define MQTT_MESSAGE_SIZE     100    // max size of mqtt message
 #define LOOP_DELAY            60000  // time between readings
+#define READ_TRYS             100    // number of times to try and get a good reading from the DHT22
 #define HUMIDITY_HIGH_LIMIT   25     // turn dehumidifier on
 #define HUMIDITY_LOW_LIMIT    20     // tune dehumidifier off
 #define EST_OFFSET            -4     // convert GMT to EST
@@ -56,6 +57,7 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 NTPClient timeClient(ntpUDP, NTP_ADDRESS, NTP_OFFSET, NTP_INTERVAL);
 DHTesp dht;
+bool        good_read_flag;
 
 long        lastMsg = 0;
 char        msg[MQTT_MESSAGE_SIZE];
@@ -143,6 +145,76 @@ void reconnect() {
   }
 }
 
+/* publish temperature */
+bool pub_temperature() {
+  int           i;
+  float         temperature;
+
+  for (i = 0; i < READ_TRYS; i++) {
+    temperature = dht.getTemperature();
+    if (isnan(temperature) == 0) {               // good read
+      temperature = dht.toFahrenheit(temperature);
+      Serial.printf("%s temperature %2.2f\n", get_time(), temperature);
+      snprintf (msg, MQTT_MESSAGE_SIZE, "%s temperature: %2.2f", get_time(), temperature);
+      client.publish(PUB_TOPIC_T, msg);
+      //update oled display
+      // display.clearDisplay();
+      
+      display.setCursor(5, 15);
+      display.print(" T = ");
+      display.println(temperature);
+      display.display();
+      return true;
+    }
+    delay(1000);
+  }
+  return false;
+}
+
+/* publish humidity */
+bool pub_hunidity() {
+  int           i;
+  float         humidity;
+
+  for (i = 0; i < READ_TRYS; i++) {
+    humidity = dht.getHumidity();
+    if (isnan(humidity) == 0) {               // good read
+      Serial.printf("%s humidity %2.2f\n", get_time(), humidity);
+      snprintf (msg, MQTT_MESSAGE_SIZE, "%s humidity: %2.2f", get_time(), humidity);
+      client.publish(PUB_TOPIC_H, msg);
+      //update oled display
+      // display.clearDisplay();
+
+      display.setCursor(5, 40);
+      display.print(" H = ");
+      display.println(humidity);
+      display.display();
+      return true;
+    }
+    delay(1000);
+  }
+  return false;
+}
+
+char* get_time() {
+  unsigned long         epoch;
+  time_t                unix_time;
+  char                  *c_time_string, *src, *dst;
+
+  // get the time
+  epoch =  timeClient.getEpochTime();
+  unix_time = static_cast<time_t>(epoch);
+  c_time_string = ctime(&unix_time);
+
+  // remove carriage return
+  for (src = dst = c_time_string; *src != '\0'; src++) {
+    *dst = *src;
+    if (*dst != '\n') dst++;
+  }
+  *dst = '\0';
+  return c_time_string;
+}
+
 void setup() {
 
   pinMode(D0, OUTPUT);                  // initialize the BUILTIN_LED pin as an output
@@ -166,7 +238,7 @@ void setup() {
 
   // Clear the buffer
   display.clearDisplay();
-  display.setTextSize(1);             // Normal 1:1 pixel scale
+  display.setTextSize(2);
   display.setTextColor(WHITE);        // Draw white text
   display.setCursor(0, 0);            // Start at top-left corner
 }
@@ -177,9 +249,7 @@ void loop() {
   float       temperature;
   // String                controller_ready_message;
   String                con_topic;
-  unsigned long         epoch;
-  char*                 c_time_string;
-  time_t                unix_time;
+
   int                   bad_read;
 
   // update the time client
@@ -198,57 +268,24 @@ void loop() {
     lastMsg = now;
     ++value;
 
-    bad_read = FALSE;
-    // get the time
-    epoch =  timeClient.getEpochTime();
-    unix_time = static_cast<time_t>(epoch);
-    c_time_string = ctime(&unix_time);
 
-    // remove carriage return
-    char *src, *dst;
-    for (src = dst = c_time_string; *src != '\0'; src++) {
-      *dst = *src;
-      if (*dst != '\n') dst++;
-    }
-    *dst = '\0';
-    while(bad_read == TRUE){
-    humidity = dht.getHumidity();
-    if (isnan(humidity)) // Check if any reads failed
-      bad_read = TRUE;
-    else
-      bad_read = FALSE;
+
+    // publish readings
+    pub_hunidity();
+    pub_temperature();
+
+
+
+
+
+
+    // // publish the readings
+
+    // snprintf (msg, MQTT_MESSAGE_SIZE, "%s humidity: %2.2f", c_time_string, humidity);
+    // client.publish(PUB_TOPIC_H, msg);
+    // Serial.printf("    published sensor readings to %s and %s\n", PUB_TOPIC_T, PUB_TOPIC_H);
   }
-    while(bad_read ==TRUE)
-    temperature = dht.getTemperature();
-    if (isnan(temperature)) // Check if any reads failed
-      bad_read = TRUE;
-    else
-      bad_read = FALSE;
 
-    if (!bad_read) {
-      temperature = dht.toFahrenheit(temperature);
-      Serial.printf("%s humidity %2.2f, temperature %2.2f\n", c_time_string, humidity, temperature);
-
-      //update oled display
-      display.clearDisplay();
-      display.setTextSize(2);
-      display.setTextColor(WHITE);        // Draw white text
-      display.setCursor(5, 15);
-      display.print(" T = ");
-      display.println(temperature);
-      display.setCursor(5, 40);
-      display.print(" H = ");
-      display.println(humidity);
-      display.display();
-
-
-      // publish the readings
-      snprintf (msg, MQTT_MESSAGE_SIZE, "%s temperature: %2.2f", c_time_string, temperature);
-      client.publish(PUB_TOPIC_T, msg);
-      snprintf (msg, MQTT_MESSAGE_SIZE, "%s humidity: %2.2f", c_time_string, humidity);
-      client.publish(PUB_TOPIC_H, msg);
-      Serial.printf("    published sensor readings to %s and %s\n", PUB_TOPIC_T, PUB_TOPIC_H);
-    }
-  }
 }
+
 
