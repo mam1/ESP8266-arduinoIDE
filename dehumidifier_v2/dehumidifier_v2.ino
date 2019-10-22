@@ -270,7 +270,7 @@ void pub_ready() {
   unsigned long         epoch;
   char*                 c_time_string;
   time_t                unix_time;
-  char                  floatString[10];
+  // char                  floatString[10];
 
   Serial.println("pub_ready called");
 
@@ -310,11 +310,11 @@ void pub_ready() {
     strcat(msg, "dehumidifier off, ");
   }
 
-  dtostrf(persist.high, 2, 2, floatString);
-  strcat(msg, floatString);
-  strcat(msg, " - ");
-  dtostrf(persist.low, 2, 2, floatString);
-  strcat(msg, floatString);
+  // dtostrf(persist.high, 2, 2, floatString);
+  // strcat(msg, floatString);
+  // strcat(msg, " - ");
+  // dtostrf(persist.low, 2, 2, floatString);
+  // strcat(msg, floatString);
 
   strcat(msg, ", controller ready");
 
@@ -364,7 +364,7 @@ void process_command(byte* payload, unsigned int length) {
     Serial.print("payload <");
     while (*tptr != '\0') Serial.print(*tptr++);
     Serial.println(">");
-    Serial.printf("command value %2.2f\n", get_command_value((char *)payload, "low"));
+    Serial.printf("command value %i\n", get_command_value((char *)payload, "low"));
     persist.low = get_command_value((char *)payload, "low");
     save_controller_state(&persist);
     pub_ready();
