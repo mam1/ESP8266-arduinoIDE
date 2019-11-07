@@ -364,7 +364,7 @@ void process_command(byte* payload, unsigned int length) {
     Serial.print("payload <");
     while (*tptr != '\0') Serial.print(*tptr++);
     Serial.println(">");
-    Serial.printf("command value %i\n", get_command_value((char *)payload, "low"));
+    Serial.printf("command value %2.2f\n", get_command_value((char *)payload, "low"));
     persist.low = get_command_value((char *)payload, "low");
     save_controller_state(&persist);
     pub_ready();
