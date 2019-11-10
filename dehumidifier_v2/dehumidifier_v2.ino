@@ -75,14 +75,16 @@ const char* keyword[CMD_TYPES] = {
 };
 char  command[MAX_COMMAND_SIZE + 1], *cmd_ptr;
 
+// char *_low = "low";
+
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // ESP8266 GPIO pins
 static const uint8_t D0   = 16;   // blue led
 static const uint8_t D1   = 5;    // SCL
 static const uint8_t D2   = 4;    // SDA
-static const uint8_t D3   = 0;    // Power relay
-static const uint8_t D4   = 2;
+static const uint8_t D3   = 0;    // Power relay 1
+static const uint8_t D4   = 2;    // Power relay 2
 static const uint8_t D5   = 14;
 static const uint8_t D6   = 12;
 static const uint8_t D7   = 13;
@@ -104,7 +106,8 @@ int         value = 0;
 typedef struct {
   int       initialized;
   int       mode;         // 0-manual off, 1-manual on, 2-auto
-  int       state;
+  int       r1state;
+  int       r2state;
   float     high;
   float     low;
 } CONTROLBLOCK;
@@ -144,8 +147,8 @@ void oled_update(void) {
   display.setTextSize(2);             // Normal 1:1 pixel scale
   display.setTextColor(WHITE);        // Draw white text
   display.setCursor(0, 15);
-  if (persist.state == OFF) display.println("off");
-  else if (persist.state == ON) display.println("on");
+  if (persist.r1state == OFF) display.println("off");
+  else if (persist.r1state == ON) display.println("on");
   display.setCursor(0, 40);
   if (persist.mode == 2) display.println("auto");
   else display.println("manual");
@@ -173,12 +176,12 @@ void load_contoller_state(CONTROLBLOCK * ptr) {
   return;
 }
 
-/* turn off relay */
-void r_off(void) {
-  if (persist.state != OFF) {
+/* turn off relay 1 */
+void r1_off(void) {
+  if (persist.r1state != OFF) {
     digitalWrite(D3, LOW);    // Turn the dehumidifier off
     digitalWrite(D0, HIGH);   // turn off the led
-    persist.state = OFF;
+    persist.r1state = OFF;
     save_controller_state(&persist);
     Serial.println("dehumidifier turned off");
     oled_update();
@@ -186,12 +189,12 @@ void r_off(void) {
   return;
 }
 
-/* turn on relay */
-void r_on(void) {
-  if (persist.state != ON) {
+/* turn on relay 1 */
+void r1_on(void) {
+  if (persist.r1state != ON) {
     digitalWrite(D3, HIGH);    // turn the dehumidifier on
     digitalWrite(D0, LOW);     // turn on the led
-    persist.state = ON;
+    persist.r1state = ON;
     save_controller_state(&persist);
     Serial.println("dehumidifier turned on");
     oled_update();
@@ -199,6 +202,29 @@ void r_on(void) {
   return;
 }
 
+/* turn off relay 2 */
+void r2_off(void) {
+  if (persist.r2state != OFF) {
+    digitalWrite(D4, LOW);    // Turn the humidifier off
+    persist.r2state = OFF;
+    save_controller_state(&persist);
+    Serial.println("humidifier turned off");
+    oled_update();
+  }
+  return;
+}
+
+/* turn on relay 2 */
+void r2_on(void) {
+  if (persist.r2state != ON) {
+    digitalWrite(D4, HIGH);    // turn the humidifier on
+    persist.r2state = ON;
+    save_controller_state(&persist);
+    Serial.println("humidifier turned on");
+    oled_update();
+  }
+  return;
+}
 /* convert text to float */
 float t_to_f(char *ptr) {
   int       i;
@@ -226,12 +252,13 @@ int get_command_type(char *sptr) {
   return -1;
 }
 
-float get_command_value(char* sptr, char* testc) {
+float get_command_value(char* sptr, const char* testc) {
   char        *ptr;
 
   ptr = strstr(sptr, testc);
   ptr +=  strlen(testc);
   while ((*ptr == ' ') || (*ptr == ':')) ptr++;
+printf("%s%2.2f\n", "value = ",t_to_f(ptr));
   return t_to_f(ptr);
 }
 
@@ -303,7 +330,7 @@ void pub_ready() {
     strcat(msg, "*** error - bad mode code ***, ");
     break;
   }
-  if (persist.state) {
+  if (persist.r1state) {
     strcat(msg, "dehumidifier on, ");
   }
   else {
@@ -326,7 +353,7 @@ void pub_ready() {
   return;
 }
 
-void process_command(byte* payload, unsigned int length) {
+void process_command(byte* payload) {
   char*       ptr;
   int         command_type;
 
@@ -347,14 +374,14 @@ void process_command(byte* payload, unsigned int length) {
     Serial.println("mode is manual force on");
     persist.mode = MANUAL;
     save_controller_state(&persist);
-    r_on();
+    r1_on();
     pub_ready();
     break;
   case 3: // off
     Serial.println("mode is manual force off");
     persist.mode = MANUAL;
     save_controller_state(&persist);
-    r_off();
+    r1_off();
     pub_ready();
     break;
   case 4: // low
@@ -395,7 +422,7 @@ void process_command(byte* payload, unsigned int length) {
   return;
 }
 
-void process_humidity_reading(byte* payload, unsigned int length) {
+void process_humidity_reading(byte* payload) {
   char*       ptr;
   int         command_type;
   float       humid;
@@ -406,15 +433,34 @@ void process_humidity_reading(byte* payload, unsigned int length) {
     Serial.println("Unknown command type");
     return;
   }
-
-  if (command_type == 1) {
+printf(" ##processing humidity reading command type is %i\n",command_type);
+  if (command_type == 1) 
+  {
     humid = get_command_value(ptr, "humidity");
-    Serial.printf("processing a humidity reading of %2.2f, %2.2f - %2.2f, mode = %i\n",
+printf(" processing humidity value is %2.2f\n", humid);
+    Serial.printf(">>>>>> processing a humidity reading of %2.2f, %2.2f - %2.2f, mode = %i\n",
                   humid, persist.high, persist.low, persist.mode);
+printf("  &&& before r1 state = %i, r2 state = %i\n", persist.r1state, persist.r2state);
     if (persist.mode == 2) {
       // set persist.state based on humidity value
-      if (humid > persist.high) r_on();
-      else if (humid <= persist.low) r_off();
+
+      // r1_on();
+      // r2_on();
+
+      if (humid >= persist.high){
+        r1_on();
+        r2_off();
+      } 
+      else if (humid <= persist.low){
+        r1_off();
+        r2_on();
+      } 
+      else{
+        r1_off();
+        r2_off();
+      }
+printf("  &&& after r1 state = %i, r2 state = %i\n", persist.r1state, persist.r2state);
+      printf("  &&& r1 state = %i, r2 state = %i\n", persist.r1state, persist.r2state);
       pub_ready();
       return;
     }
@@ -435,10 +481,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
   payload[i] = '\0';
   Serial.println();
   if (strcmp(topic, SUB_TOPIC_1) != 0) {
-    process_command(payload, length);
+    process_command(payload);
   }
   else if (strcmp(topic, SUB_TOPIC_2) != 0) {
-    process_humidity_reading(payload, length);
+    process_humidity_reading(payload);
   }
   return;
 }
@@ -449,10 +495,12 @@ void setup() {
   control_block_size = sizeof(persist);
   EEPROM.begin(control_block_size);     // define some flash memory
   load_contoller_state(&persist);       // load control block from flash
+  persist.initialized = FALSE;
   if (persist.initialized != TRUE) {    // initialize control block if necessary
     persist.initialized = TRUE;
-    persist.mode = MANUAL;
-    persist.state = OFF;
+    persist.mode = AUTO;
+    persist.r1state = OFF;
+    persist.r2state = OFF;
     persist.high = HUMIDITY_HIGH_LIMIT;
     persist.low = HUMIDITY_LOW_LIMIT;
     save_controller_state(&persist);    // save control block
@@ -462,9 +510,13 @@ void setup() {
   pinMode(D0, OUTPUT);                  // use D0 to control builtin LED
   pinMode(D3, OUTPUT);                  // use D3  to control power relay
 
-  if (persist.state == ON) r_on();
-  else if(persist.state == OFF) r_off();
-  else Serial.println("***** bad state code\n");
+  if (persist.r1state == ON) r1_on();
+  else if(persist.r1state == OFF) r1_off();
+  else Serial.println("***** bad r1 state code\n");
+
+  if (persist.r2state == ON) r1_on();
+  else if(persist.r2state == OFF) r1_off();
+  else Serial.println("***** bad r2 state code\n");
 
   setup_wifi();                         // connect to wifi
   timeClient.begin();                   // initialize time client
