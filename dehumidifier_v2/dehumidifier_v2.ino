@@ -495,7 +495,7 @@ void setup() {
   control_block_size = sizeof(persist);
   EEPROM.begin(control_block_size);     // define some flash memory
   load_contoller_state(&persist);       // load control block from flash
-  persist.initialized = FALSE;
+  // persist.initialized = FALSE;
   if (persist.initialized != TRUE) {    // initialize control block if necessary
     persist.initialized = TRUE;
     persist.mode = AUTO;
