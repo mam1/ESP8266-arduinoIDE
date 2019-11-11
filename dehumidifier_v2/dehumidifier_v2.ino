@@ -48,7 +48,7 @@
 
 #define MQTT_MESSAGE_SIZE   200               // max size of mqtt message
 
-#define LOOP_DELAY          90000             // time between publishing ready message
+#define LOOP_DELAY          200000            // time between publishing ready message
 #define HUMIDITY_HIGH_LIMIT 64                // turn on dehumidifier
 #define HUMIDITY_LOW_LIMIT  61                // turn on humidifier
 #define EST_OFFSET   -4                       // convert GMT to EST

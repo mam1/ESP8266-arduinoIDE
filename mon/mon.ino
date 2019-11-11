@@ -21,8 +21,10 @@ const char* ssid = "FrontierHSI";
 const char* password = "";
 const char* mqtt_server = "192.168.254.221";
 
-#define PUB_TOPIC_H             "258Thomas/shop/office/sensor/humidity"
-#define PUB_TOPIC_T             "258Thomas/shop/office/sensor/temperature"
+#define PUB_TOPIC_H             "258Thomas/shop/dryer/sensor/humidity"
+#define PUB_TOPIC_T             "258Thomas/shop/dryer/sensor/temperature"
+#define PUB_TOPIC_RH            "258Thomas/shop/dryer/sensor/humidity/raw"
+#define PUB_TOPIC_RT            "258Thomas/shop/dryer/sensor/temperature/raw"
 
 #define MQTT_MESSAGE_SIZE  100
 #define LOOP_DELAY  60000                     // time between readings
@@ -74,7 +76,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
-  for (int i = 0; i < length; i++) {
+  for (int i = 0; i < (int)length; i++) {
     Serial.print((char)payload[i]);
   }
   Serial.println();
@@ -103,8 +105,10 @@ void reconnect() {
 
 void setup() {
 
+// setup gpios
+  // pinMode(BUILTIN_LED, OUTPUT);         // initialize the BUILTIN_LED pin as an output
 
-  pinMode(BUILTIN_LED, OUTPUT);         // initialize the BUILTIN_LED pin as an output
+
   Serial.begin(115200);                 // start the serial interface
   setup_wifi();                         // connect to wifi
   timeClient.begin();                   // initialize time client
@@ -186,6 +190,13 @@ void loop() {
 
     snprintf (msg, MQTT_MESSAGE_SIZE, "%s humidity: %2.2f", c_time_string,humidity);
     client.publish(PUB_TOPIC_H, msg);
+
+    snprintf (msg, MQTT_MESSAGE_SIZE, "%2.2f", temperature);
+    client.publish(PUB_TOPIC_RT, msg);
+
+    snprintf (msg, MQTT_MESSAGE_SIZE, "%2.2f", humidity);
+    client.publish(PUB_TOPIC_RH, msg);
+
     Serial.printf("%s published sensor readings\n", c_time_string);
   }
 }

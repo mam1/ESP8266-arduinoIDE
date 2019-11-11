@@ -31,6 +31,9 @@
 #define NTP_INTERVAL 60 * 1000                // In milliseconds
 #define NTP_ADDRESS  "us.pool.ntp.org"        // time server
 
+#define TRUE    1
+#define FALSE     -1
+
 const char* ssid = "FrontierHSI";
 const char* password = "";
 const char* mqtt_server = "192.168.254.221";
@@ -211,20 +214,25 @@ void loop() {
       if (*dst != '\n') dst++;
     }
     *dst = '\0';
-    while(bad_read == TRUE){
-    humidity = dht.getHumidity();
-    if (isnan(humidity)) // Check if any reads failed
-      bad_read = TRUE;
-    else
-      bad_read = FALSE;
-  }
-    while(bad_read ==TRUE)
-    temperature = dht.getTemperature();
-    if (isnan(temperature)) // Check if any reads failed
-      bad_read = TRUE;
-    else
-      bad_read = FALSE;
 
+    // get the humidity
+    while (bad_read == TRUE) {
+      humidity = dht.getHumidity();
+      if (isnan(humidity)) // Check if any reads failed
+        bad_read = TRUE;
+      else
+        bad_read = FALSE;
+    }
+
+    // get temperature
+    while (bad_read == TRUE) {
+      temperature = dht.getTemperature();
+      if (isnan(temperature)) // Check if any reads failed
+        bad_read = TRUE;
+      else
+        bad_read = FALSE;
+    }
+    
     if (!bad_read) {
       temperature = dht.toFahrenheit(temperature);
       Serial.printf("%s humidity %2.2f, temperature %2.2f\n", c_time_string, humidity, temperature);
@@ -246,6 +254,10 @@ void loop() {
       snprintf (msg, MQTT_MESSAGE_SIZE, "%s temperature: %2.2f", c_time_string, temperature);
       client.publish(PUB_TOPIC_T, msg);
       snprintf (msg, MQTT_MESSAGE_SIZE, "%s humidity: %2.2f", c_time_string, humidity);
+      client.publish(PUB_TOPIC_H, msg);
+      snprintf (msg, MQTT_MESSAGE_SIZE, "%2.2f", temperature);
+      client.publish(PUB_TOPIC_T, msg);
+      snprintf (msg, MQTT_MESSAGE_SIZE, "%2.2f", humidity);
       client.publish(PUB_TOPIC_H, msg);
       Serial.printf("    published sensor readings to %s and %s\n", PUB_TOPIC_T, PUB_TOPIC_H);
     }
