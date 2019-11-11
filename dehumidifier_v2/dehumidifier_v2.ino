@@ -48,9 +48,9 @@
 
 #define MQTT_MESSAGE_SIZE   200               // max size of mqtt message
 
-#define LOOP_DELAY          60000             // time between readings
-#define HUMIDITY_HIGH_LIMIT 64                // turn dehumidifier on
-#define HUMIDITY_LOW_LIMIT  61                // turn dehumidifier off
+#define LOOP_DELAY          90000             // time between publishing ready message
+#define HUMIDITY_HIGH_LIMIT 64                // turn on dehumidifier
+#define HUMIDITY_LOW_LIMIT  61                // turn on humidifier
 #define EST_OFFSET   -4                       // convert GMT to EST
 #define NTP_OFFSET   60 * 60 * EST_OFFSET     // In seconds
 #define NTP_INTERVAL 60 * 1000                // In milliseconds
@@ -84,8 +84,8 @@ static const uint8_t D0   = 16;   // blue led
 static const uint8_t D1   = 5;    // SCL
 static const uint8_t D2   = 4;    // SDA
 static const uint8_t D3   = 0;    // Power relay 1
-static const uint8_t D4   = 2;    // Power relay 2
-static const uint8_t D5   = 14;
+static const uint8_t D4   = 2;    
+static const uint8_t D5   = 14;   // Power relay 2
 static const uint8_t D6   = 12;
 static const uint8_t D7   = 13;
 static const uint8_t D8   = 15;
@@ -114,17 +114,15 @@ typedef struct {
 
 CONTROLBLOCK    persist;
 CONTROLBLOCK    *cbptr;
-int         control_block_size;
+int             control_block_size;
 
 /* setup a wifi connection */
 void setup_wifi() {
-
   delay(10);
   // Connect to WiFi network
   Serial.println();
   Serial.print("Connecting to ");
   Serial.println(ssid);
-
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -141,15 +139,18 @@ void setup_wifi() {
 }
 
 /* update OLED display */
-
 void oled_update(void) {
   display.clearDisplay();
   display.setTextSize(2);             // Normal 1:1 pixel scale
   display.setTextColor(WHITE);        // Draw white text
-  display.setCursor(0, 15);
-  if (persist.r1state == OFF) display.println("off");
-  else if (persist.r1state == ON) display.println("on");
-  display.setCursor(0, 40);
+  display.setCursor(0, 5);
+  if (persist.r1state == OFF) display.println("1-off");
+  else if (persist.r1state == ON) display.println("1-on");
+  if (persist.r2state == OFF) display.println("2-off");
+  else if (persist.r2state == ON) display.println("2-on");
+
+
+  display.setCursor(0, 45);
   if (persist.mode == 2) display.println("auto");
   else display.println("manual");
   display.display();
@@ -176,19 +177,6 @@ void load_contoller_state(CONTROLBLOCK * ptr) {
   return;
 }
 
-/* turn off relay 1 */
-void r1_off(void) {
-  if (persist.r1state != OFF) {
-    digitalWrite(D3, LOW);    // Turn the dehumidifier off
-    digitalWrite(D0, HIGH);   // turn off the led
-    persist.r1state = OFF;
-    save_controller_state(&persist);
-    Serial.println("dehumidifier turned off");
-    oled_update();
-  }
-  return;
-}
-
 /* turn on relay 1 */
 void r1_on(void) {
   if (persist.r1state != ON) {
@@ -202,13 +190,14 @@ void r1_on(void) {
   return;
 }
 
-/* turn off relay 2 */
-void r2_off(void) {
-  if (persist.r2state != OFF) {
-    digitalWrite(D4, LOW);    // Turn the humidifier off
-    persist.r2state = OFF;
+/* turn off relay 1 */
+void r1_off(void) {
+  if (persist.r1state != OFF) {
+    digitalWrite(D3, LOW);    // Turn the dehumidifier off
+    digitalWrite(D0, HIGH);   // turn off the led
+    persist.r1state = OFF;
     save_controller_state(&persist);
-    Serial.println("humidifier turned off");
+    Serial.println("dehumidifier turned off");
     oled_update();
   }
   return;
@@ -217,7 +206,7 @@ void r2_off(void) {
 /* turn on relay 2 */
 void r2_on(void) {
   if (persist.r2state != ON) {
-    digitalWrite(D4, HIGH);    // turn the humidifier on
+    digitalWrite(D5, HIGH);    // turn the humidifier on
     persist.r2state = ON;
     save_controller_state(&persist);
     Serial.println("humidifier turned on");
@@ -225,6 +214,20 @@ void r2_on(void) {
   }
   return;
 }
+
+/* turn off relay 2 */
+void r2_off(void) {
+  if (persist.r2state != OFF) {
+    digitalWrite(D5, LOW);    // Turn the humidifier off
+    persist.r2state = OFF;
+    save_controller_state(&persist);
+    Serial.println("humidifier turned off");
+    oled_update();
+  }
+  return;
+}
+
+
 /* convert text to float */
 float t_to_f(char *ptr) {
   int       i;
@@ -297,9 +300,7 @@ void pub_ready() {
   unsigned long         epoch;
   char*                 c_time_string;
   time_t                unix_time;
-  // char                  floatString[10];
-
-  Serial.println("pub_ready called");
+  char                  floatString[20];
 
   // get the time
   epoch =  timeClient.getEpochTime();
@@ -316,38 +317,51 @@ void pub_ready() {
   memset(&msg[0], '\0', sizeof(msg));
   strcpy(msg, c_time_string);
 
+
+
+
   switch (persist.mode) {
   case 0:
-    strcat(msg, ", manual control, ");
+    strcat(msg, " manual control, ");
     break;
   case 1:
-    strcat(msg, ", manual control, ");
+    strcat(msg, " manual control, ");
     break;
   case 2:
-    strcat(msg, ", automatic control, ");
+    strcat(msg, " automatic control, ");
     break;
   default:
-    strcat(msg, "*** error - bad mode code ***, ");
+    strcat(msg, " *** error - bad mode code ***, ");
     break;
   }
+
+  strcat(msg, "control range ");
+  dtostrf(persist.high, 2, 2, floatString);
+  strcat(msg, floatString);
+  strcat(msg, "-");
+  dtostrf(persist.low, 2, 2, floatString);
+  strcat(msg, floatString);
+
   if (persist.r1state) {
-    strcat(msg, "dehumidifier on, ");
+    strcat(msg, ", dehumidifier on, ");
   }
   else {
-    strcat(msg, "dehumidifier off, ");
+    strcat(msg, ", dehumidifier off, ");
   }
 
-  // dtostrf(persist.high, 2, 2, floatString);
-  // strcat(msg, floatString);
-  // strcat(msg, " - ");
-  // dtostrf(persist.low, 2, 2, floatString);
-  // strcat(msg, floatString);
+  if (persist.r2state) {
+    strcat(msg, "humidifier on, ");
+  }
+  else {
+    strcat(msg, "humidifier off, ");
+  }
 
-  strcat(msg, ", controller ready");
+  strcat(msg, "controller ready");
 
   Serial.println("publishing message");
-  Serial.printf("** %s **\n", msg);
+  Serial.printf("'%s'\n", msg);
   client.publish(PUB_TOPIC, msg);
+
   oled_update();
 
   return;
@@ -433,14 +447,11 @@ void process_humidity_reading(byte* payload) {
     Serial.println("Unknown command type");
     return;
   }
-printf(" ##processing humidity reading command type is %i\n",command_type);
   if (command_type == 1) 
   {
     humid = get_command_value(ptr, "humidity");
-printf(" processing humidity value is %2.2f\n", humid);
     Serial.printf(">>>>>> processing a humidity reading of %2.2f, %2.2f - %2.2f, mode = %i\n",
                   humid, persist.high, persist.low, persist.mode);
-printf("  &&& before r1 state = %i, r2 state = %i\n", persist.r1state, persist.r2state);
     if (persist.mode == 2) {
       // set persist.state based on humidity value
 
@@ -451,16 +462,15 @@ printf("  &&& before r1 state = %i, r2 state = %i\n", persist.r1state, persist.r
         r1_on();
         r2_off();
       } 
-      else if (humid <= persist.low){
+      else if (humid >= persist.low){
         r1_off();
-        r2_on();
+        r2_off();
       } 
       else{
         r1_off();
-        r2_off();
+        r2_on();
       }
-printf("  &&& after r1 state = %i, r2 state = %i\n", persist.r1state, persist.r2state);
-      printf("  &&& r1 state = %i, r2 state = %i\n", persist.r1state, persist.r2state);
+
       pub_ready();
       return;
     }
@@ -492,7 +502,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 void setup() {
 
   Serial.begin(115200);                 // start the serial interface
-  control_block_size = sizeof(persist);
+  control_block_size = sizeof(persist); // size of persistent memory in EEprom
   EEPROM.begin(control_block_size);     // define some flash memory
   load_contoller_state(&persist);       // load control block from flash
   // persist.initialized = FALSE;
@@ -506,23 +516,23 @@ void setup() {
     save_controller_state(&persist);    // save control block
   }
   load_contoller_state(&persist);
-
   pinMode(D0, OUTPUT);                  // use D0 to control builtin LED
-  pinMode(D3, OUTPUT);                  // use D3  to control power relay
+  pinMode(D3, OUTPUT);                  // use D3  to control power relay #1
+  pinMode(D4, OUTPUT);                  // use D4  
+  pinMode(D5, OUTPUT);                  // use D5  to control power relay #2
 
   if (persist.r1state == ON) r1_on();
   else if(persist.r1state == OFF) r1_off();
   else Serial.println("***** bad r1 state code\n");
 
-  if (persist.r2state == ON) r1_on();
-  else if(persist.r2state == OFF) r1_off();
+  if (persist.r2state == ON) r2_on();
+  else if(persist.r2state == OFF) r2_off();
   else Serial.println("***** bad r2 state code\n");
 
   setup_wifi();                         // connect to wifi
   timeClient.begin();                   // initialize time client
   client.setServer(mqtt_server, 1883);  // initialize MQTT broker
   client.setCallback(callback);         // set function that executes when a message is received
-
 // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("SSD1306 allocation failed"));
