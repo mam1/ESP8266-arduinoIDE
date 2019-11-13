@@ -25,11 +25,8 @@ const char* mqtt_server = "192.168.254.221";
 #define PUB_TOPIC_T             "258Thomas/shop/dryer/sensor/temperature"
 #define PUB_TOPIC_RH            "258Thomas/shop/dryer/sensor/humidity/raw"
 #define PUB_TOPIC_RT            "258Thomas/shop/dryer/sensor/temperature/raw"
-
-#define MQTT_MESSAGE_SIZE  100
+#define MQTT_MESSAGE_SIZE  200
 #define LOOP_DELAY  60000                     // time between readings
-
-
 #define EST_OFFSET   -4                       // convert GMT to EST
 #define NTP_OFFSET   60 * 60 * EST_OFFSET     // In seconds
 #define NTP_INTERVAL 60 * 1000                // In milliseconds
@@ -56,7 +53,6 @@ void setup_wifi() {
   Serial.println();
   Serial.print("Connecting to ");
   Serial.println(ssid);
-
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {
@@ -105,16 +101,13 @@ void reconnect() {
 
 void setup() {
 
-// setup gpios
-  // pinMode(BUILTIN_LED, OUTPUT);         // initialize the BUILTIN_LED pin as an output
-
-
   Serial.begin(115200);                 // start the serial interface
   setup_wifi();                         // connect to wifi
   timeClient.begin();                   // initialize time client
-  htu.begin();                          // initialize the DHT22 sensor
+  htu.begin();                          // initialize the sensor
   client.setServer(mqtt_server, 1883);  // initialize MQTT broker
-  client.setCallback(callback);
+  client.setCallback(callback);         // set routine to be called when a message recieved
+
    // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
     Serial.println(F("SSD1306 allocation failed"));
@@ -152,14 +145,12 @@ void loop() {
   if (now - lastMsg > LOOP_DELAY) {
     lastMsg = now;
     ++value;
-
     temperature = (htu.readTemperature() * 1.8) + 32;
     humidity = htu.readHumidity();
     if (isnan(temperature) || isnan(humidity)){
       Serial.println("sensor read failed");
       return;
     }
-    // humidity += float(DHT22_OFFSET);
 
     display.clearDisplay();
     display.setTextSize(2);             
@@ -187,16 +178,12 @@ void loop() {
     // publish the readings
     snprintf (msg, MQTT_MESSAGE_SIZE, "%s temperature: %2.2f", c_time_string,temperature);
     client.publish(PUB_TOPIC_T, msg);
-
     snprintf (msg, MQTT_MESSAGE_SIZE, "%s humidity: %2.2f", c_time_string,humidity);
     client.publish(PUB_TOPIC_H, msg);
-
     snprintf (msg, MQTT_MESSAGE_SIZE, "%2.2f", temperature);
     client.publish(PUB_TOPIC_RT, msg);
-
     snprintf (msg, MQTT_MESSAGE_SIZE, "%2.2f", humidity);
     client.publish(PUB_TOPIC_RH, msg);
-
     Serial.printf("%s published sensor readings\n", c_time_string);
   }
 }
