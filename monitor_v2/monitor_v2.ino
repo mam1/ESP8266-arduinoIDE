@@ -1,6 +1,7 @@
 /*
-
-  read sensor and report temperature and humidity
+  periodically read a DHT22 sensor 
+  publish the readings to a MQTT broker
+  update values on OLED display
 
 */
 
