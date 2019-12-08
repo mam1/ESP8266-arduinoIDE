@@ -1,12 +1,9 @@
 /*
 
-  listens for a messages from the dryer that contain a humidity value
-  accepts command to automatically turn a power relay off or on depending on the humidity value and the humidity limits
-  accepts commands to raise or lower humidity limits
-  accepts command to manually turn the relay off or on
+  listens for a messages from the dryer that contain a humidity value.  When a message is received relay states are adjusted
 
-  off  - turn relay off and swithch to manual mode
-  on   - turn relay on and swithch to manual mode
+  off  - turn relay off and switch to manual mode
+  on   - turn relay on and switch to manual mode
   auto - automatically turn a power relay off or on depending on the humidity value and the humidity limits
   low xx.xx   - set low humidity limit
   high xx.xx  - set high humidity limit
@@ -42,7 +39,7 @@
 #define SCREEN_WIDTH 128                      // OLED display width, in pixels
 #define SCREEN_HEIGHT 64                      // OLED display height, in pixels
 
-#define SUB_TOPIC_1   "258Thomas/shop/dryer/sensor/humidity"
+#define SUB_TOPIC_1   "258Thomas/shop/dryer/sensor/humidity/raw"
 #define SUB_TOPIC_2   "258Thomas/shop/dryer/controller/commands"
 #define PUB_TOPIC     "258Thomas/shop/dryer/controller"
 
@@ -80,17 +77,12 @@ char  command[MAX_COMMAND_SIZE + 1], *cmd_ptr;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // ESP8266 GPIO pins
-static const uint8_t D0   = 16;   // blue led
-static const uint8_t D1   = 5;    // SCL
-static const uint8_t D2   = 4;    // SDA
-static const uint8_t D3   = 0;    // Power relay 1
-static const uint8_t D4   = 2;    
-static const uint8_t D5   = 14;   // Power relay 2
-static const uint8_t D6   = 12;
-static const uint8_t D7   = 13;
-static const uint8_t D8   = 15;
-static const uint8_t D9   = 3;
-static const uint8_t D10  = 1;
+static const uint8_t BLUE_LED-pin = 2;  // blue led
+static const uint8_t RED_LED_pin = 0;   // red led
+static const uint8_t SCL_pin = 5;       // SCL_pin
+static const uint8_t SDA_pin = 4;       // SDA_pin
+static const uint8_t RELAY_1_pin = 0;   // Power relay 1   
+static const uint8_t RELAY_2_pin   = 14;// Power relay 2
 
 WiFiUDP ntpUDP;
 WiFiClient espClient;
@@ -359,7 +351,7 @@ void pub_ready() {
   strcat(msg, "controller ready");
 
   Serial.println("publishing message");
-  Serial.printf("'%s'\n", msg);
+  Serial.printf("%s\n", msg);
   client.publish(PUB_TOPIC, msg);
 
   oled_update();
@@ -497,13 +489,45 @@ void callback(char* topic, byte* payload, unsigned int length) {
     process_humidity_reading(payload);
   }
   return;
+
+  /******************************************************************************************/
+
+
+void callback(char* topic, byte* payload, unsigned int length) {
+  if (strcmp(topic,"pir1Status")==0){
+    // whatever you want for this topic
+  }
+ 
+  if (strcmp(topic,"red")==0) {
+    // obvioulsy state of my red LED
+  }
+ 
+  if (strcmp(topic,"blue")==0) {
+    // this one is blue...
+  }  
+ 
+  if (strcmp(topic,"green")==0) {
+    // i forgot, is this orange?
+  }  
+}
+
+  /********************************************************************************************/
 }
 
 void setup() {
 
   Serial.begin(115200);                 // start the serial interface
+// setup GPIO pins
+  pinMode(RED_LED_pin, OUTPUT);         // use to control red LED
+  pinMode(BLUE_LED_pin, OUTPUT);        // use to control blue led
+  pinMode(RELAY_1_pin, OUTPUT);         // use to control power relay #1
+  pinMode(RELAY_2_pin, OUTPUT);         // use to control power relay #2 
+                 
+
+
+// get persistent data from flash
   control_block_size = sizeof(persist); // size of persistent memory in EEprom
-  EEPROM.begin(control_block_size);     // define some flash memory
+  EEPROM.begin(control_block_size);     // define flash memory
   load_contoller_state(&persist);       // load control block from flash
   // persist.initialized = FALSE;
   if (persist.initialized != TRUE) {    // initialize control block if necessary
@@ -516,11 +540,8 @@ void setup() {
     save_controller_state(&persist);    // save control block
   }
   load_contoller_state(&persist);
-  pinMode(D0, OUTPUT);                  // use D0 to control builtin LED
-  pinMode(D3, OUTPUT);                  // use D3  to control power relay #1
-  pinMode(D4, OUTPUT);                  // use D4  
-  pinMode(D5, OUTPUT);                  // use D5  to control power relay #2
 
+// initialize relays
   if (persist.r1state == ON) r1_on();
   else if(persist.r1state == OFF) r1_off();
   else Serial.println("***** bad r1 state code\n");
@@ -529,18 +550,20 @@ void setup() {
   else if(persist.r2state == OFF) r2_off();
   else Serial.println("***** bad r2 state code\n");
 
-  setup_wifi();                         // connect to wifi
-  timeClient.begin();                   // initialize time client
-  client.setServer(mqtt_server, 1883);  // initialize MQTT broker
-  client.setCallback(callback);         // set function that executes when a message is received
-// SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+// initial oled display
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("SSD1306 allocation failed"));
     for (;;); // Don't proceed, loop forever
   }
   oled_update();
+
+  setup_wifi();                         // connect to wifi
+  timeClient.begin();                   // initialize time client
+  client.setServer(mqtt_server, 1883);  // initialize MQTT broker
+  client.setCallback(callback);         // set function that executes when a message is received
 }
 
+// heart beat loop
 void loop() {
 
   // update the time client
@@ -556,7 +579,7 @@ void loop() {
   if (now - lastMsg > LOOP_DELAY) {
     lastMsg = now;
     ++value;
-    pub_ready();
+    pub_ready();  // let the world know that i'm ready
   }
 }
 
