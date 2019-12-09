@@ -77,12 +77,12 @@ char  command[MAX_COMMAND_SIZE + 1], *cmd_ptr;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // ESP8266 GPIO pins
-static const uint8_t BLUE_LED-pin = 2;  // blue led
+static const uint8_t BLUE_LED_pin = 2;  // blue led
 static const uint8_t RED_LED_pin = 0;   // red led
 static const uint8_t SCL_pin = 5;       // SCL_pin
 static const uint8_t SDA_pin = 4;       // SDA_pin
-static const uint8_t RELAY_1_pin = 0;   // Power relay 1   
-static const uint8_t RELAY_2_pin   = 14;// Power relay 2
+static const uint8_t RELAY_1_pin = 12;  // Power relay 1   
+static const uint8_t RELAY_2_pin = 13;  // Power relay 2
 
 WiFiUDP ntpUDP;
 WiFiClient espClient;
@@ -172,8 +172,8 @@ void load_contoller_state(CONTROLBLOCK * ptr) {
 /* turn on relay 1 */
 void r1_on(void) {
   if (persist.r1state != ON) {
-    digitalWrite(D3, HIGH);    // turn the dehumidifier on
-    digitalWrite(D0, LOW);     // turn on the led
+    digitalWrite(RELAY_1_pin, HIGH);    // turn the dehumidifier on
+    digitalWrite(RED_LED_pin, LOW);     // turn on the led
     persist.r1state = ON;
     save_controller_state(&persist);
     Serial.println("dehumidifier turned on");
@@ -185,8 +185,8 @@ void r1_on(void) {
 /* turn off relay 1 */
 void r1_off(void) {
   if (persist.r1state != OFF) {
-    digitalWrite(D3, LOW);    // Turn the dehumidifier off
-    digitalWrite(D0, HIGH);   // turn off the led
+    digitalWrite(RELAY_1_pin, LOW);    // Turn the dehumidifier off
+    digitalWrite(RED_LED_pin, HIGH);   // turn off the led
     persist.r1state = OFF;
     save_controller_state(&persist);
     Serial.println("dehumidifier turned off");
@@ -198,7 +198,7 @@ void r1_off(void) {
 /* turn on relay 2 */
 void r2_on(void) {
   if (persist.r2state != ON) {
-    digitalWrite(D5, HIGH);    // turn the humidifier on
+    digitalWrite(RELAY_2_pin, HIGH);    // turn the humidifier on
     persist.r2state = ON;
     save_controller_state(&persist);
     Serial.println("humidifier turned on");
@@ -210,7 +210,7 @@ void r2_on(void) {
 /* turn off relay 2 */
 void r2_off(void) {
   if (persist.r2state != OFF) {
-    digitalWrite(D5, LOW);    // Turn the humidifier off
+    digitalWrite(RELAY_2_pin, LOW);    // Turn the humidifier off
     persist.r2state = OFF;
     save_controller_state(&persist);
     Serial.println("humidifier turned off");
@@ -493,23 +493,23 @@ void callback(char* topic, byte* payload, unsigned int length) {
   /******************************************************************************************/
 
 
-void callback(char* topic, byte* payload, unsigned int length) {
-  if (strcmp(topic,"pir1Status")==0){
-    // whatever you want for this topic
-  }
+// void callback(char* topic, byte* payload, unsigned int length) {
+//   if (strcmp(topic,"pir1Status")==0){
+//     // whatever you want for this topic
+//   }
  
-  if (strcmp(topic,"red")==0) {
-    // obvioulsy state of my red LED
-  }
+//   if (strcmp(topic,"red")==0) {
+//     // obvioulsy state of my red LED
+//   }
  
-  if (strcmp(topic,"blue")==0) {
-    // this one is blue...
-  }  
+//   if (strcmp(topic,"blue")==0) {
+//     // this one is blue...
+//   }  
  
-  if (strcmp(topic,"green")==0) {
-    // i forgot, is this orange?
-  }  
-}
+//   if (strcmp(topic,"green")==0) {
+//     // i forgot, is this orange?
+//   }  
+// }
 
   /********************************************************************************************/
 }
