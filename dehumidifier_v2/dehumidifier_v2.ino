@@ -34,7 +34,7 @@
 #define FALSE     -1
 
 #define MAX_COMMAND_SIZE  100
-#define CMD_TYPES     9
+#define CMD_TYPES     11
 
 #define SCREEN_WIDTH 128                      // OLED display width, in pixels
 #define SCREEN_HEIGHT 64                      // OLED display height, in pixels
@@ -62,13 +62,15 @@ const char* mqtt_server = "192.168.254.221";
 const char* keyword[CMD_TYPES] = {
   /*  0 */    "temperature",
   /*  1 */    "humidity",
-  /*  2 */    "on",
-  /*  3 */    "off",
-  /*  4 */    "low",
-  /*  5 */    "high",
-  /*  6 */    "status",
-  /*  7 */    "????",
-  /*  8 */    "auto"
+  /*  2 */    "on1",
+  /*  3 */    "off1",
+  /*  4 */    "on2",
+  /*  5 */    "off2",
+  /*  6 */    "low",
+  /*  7 */    "high",
+  /*  8 */    "status",
+  /*  9 */    "????",
+  /* 10 */    "auto"
 };
 char  command[MAX_COMMAND_SIZE + 1], *cmd_ptr;
 
@@ -102,6 +104,7 @@ typedef struct {
   int       r2state;
   float     high;
   float     low;
+  float     humid; //last humidity reading
 } CONTROLBLOCK;
 
 CONTROLBLOCK    persist;
@@ -377,20 +380,34 @@ void process_command(byte* payload) {
   case 1: // humidity
     break;
   case 2: // on
-    Serial.println("mode is manual force on");
+    Serial.println("r1 mode is manual force on");
     persist.mode = MANUAL;
     save_controller_state(&persist);
     r1_on();
     pub_ready();
     break;
   case 3: // off
-    Serial.println("mode is manual force off");
+    Serial.println("r1 mode is manual force off");
     persist.mode = MANUAL;
     save_controller_state(&persist);
     r1_off();
     pub_ready();
     break;
-  case 4: // low
+  case 4: // on
+    Serial.println("r2 mode is manual force on");
+    persist.mode = MANUAL;
+    save_controller_state(&persist);
+    r2_on();
+    pub_ready();
+    break;
+  case 5: // off
+    Serial.println("r2 mode is manual force off");
+    persist.mode = MANUAL;
+    save_controller_state(&persist);
+    r2_off();
+    pub_ready();
+    break;
+  case 6: // low
     Serial.println("set low humidity limit");
     char    *tptr;
     tptr = (char*)payload;
@@ -402,22 +419,35 @@ void process_command(byte* payload) {
     save_controller_state(&persist);
     pub_ready();
     break;
-  case 5: // high
+  case 7: // high
     Serial.println("set high humidity limit");
     persist.high = get_command_value((char *)payload, "high");
     save_controller_state(&persist);
     pub_ready();
     break;
-  case 6:  // status
+  case 8:  // status
     Serial.print("system status - ");
     pub_ready();
     break;
-  case 7:  // t_ high
+  case 9:  // t_ high
     break;
-  case 8: // auto
+  case 10: // auto
     Serial.println("mode is auto");
     persist.mode = AUTO;
     save_controller_state(&persist);
+
+    if (persist.humid >= persist.high){
+        r1_on();
+        r2_off();
+      } 
+      else if (persist.humid >= persist.low){
+        r1_off();
+        r2_off();
+      } 
+      else{
+        r1_off();
+        r2_on();
+      }
 
     pub_ready();
     break;
@@ -431,7 +461,7 @@ void process_command(byte* payload) {
 void process_humidity_reading(byte* payload) {
   char*       ptr;
   int         command_type;
-  float       humid;
+
 
   ptr = (char*)payload;
   command_type = get_command_type(ptr);
@@ -441,20 +471,20 @@ void process_humidity_reading(byte* payload) {
   }
   if (command_type == 1) 
   {
-    humid = get_command_value(ptr, "humidity");
+    persist.humid = get_command_value(ptr, "humidity");
     Serial.printf(">>>>>> processing a humidity reading of %2.2f, %2.2f - %2.2f, mode = %i\n",
-                  humid, persist.high, persist.low, persist.mode);
+                  persist.humid, persist.high, persist.low, persist.mode);
     if (persist.mode == 2) {
       // set persist.state based on humidity value
 
       // r1_on();
       // r2_on();
 
-      if (humid >= persist.high){
+      if (persist.humid >= persist.high){
         r1_on();
         r2_off();
       } 
-      else if (humid >= persist.low){
+      else if (persist.humid >= persist.low){
         r1_off();
         r2_off();
       } 
