@@ -39,8 +39,8 @@
 #define SCREEN_WIDTH 128                      // OLED display width, in pixels
 #define SCREEN_HEIGHT 64                      // OLED display height, in pixels
 
-#define SUB_TOPIC_1   "258Thomas/shop/dryer/sensor/humidity/raw"
-#define SUB_TOPIC_2   "258Thomas/shop/dryer/controller/commands"
+#define SUB_TOPIC_1   "258Thomas/shop/office/bay2/sensor/humidity"
+#define SUB_TOPIC_2   "258Thomas/shop/office/bay2/sensor/commands"
 #define PUB_TOPIC     "258Thomas/shop/dryer/controller"
 
 #define MQTT_MESSAGE_SIZE   200               // max size of mqtt message
@@ -435,7 +435,6 @@ void process_command(byte* payload) {
     Serial.println("mode is auto");
     persist.mode = AUTO;
     save_controller_state(&persist);
-
     if (persist.humid >= persist.high){
         r1_on();
         r2_off();
@@ -553,8 +552,6 @@ void setup() {
   pinMode(RELAY_1_pin, OUTPUT);         // use to control power relay #1
   pinMode(RELAY_2_pin, OUTPUT);         // use to control power relay #2 
                  
-
-
 // get persistent data from flash
   control_block_size = sizeof(persist); // size of persistent memory in EEprom
   EEPROM.begin(control_block_size);     // define flash memory
@@ -567,9 +564,10 @@ void setup() {
     persist.r2state = OFF;
     persist.high = HUMIDITY_HIGH_LIMIT;
     persist.low = HUMIDITY_LOW_LIMIT;
+    persist.humid = 50.0;
     save_controller_state(&persist);    // save control block
   }
-  load_contoller_state(&persist);
+  load_contoller_state(&persist);       // move dtat from flash to data structure
 
 // initialize relays
   if (persist.r1state == ON) r1_on();
